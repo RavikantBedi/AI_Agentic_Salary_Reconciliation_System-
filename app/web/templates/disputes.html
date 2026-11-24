@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ t('nav.disputes') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t('nav.disputes') }}</h1>
+    <p class="sub">Questions raised with the paying office, and their progress.</p>
+  </div>
+  {% if not is_read_only %}
+  <a class="btn" href="/disputes/new">{{ t('btn.raise_dispute') }}</a>
+  {% endif %}
+</div>
+
+<form method="get" class="filters">
+  <div class="field">
+    <label for="st">{{ t('field.status') }}</label>
+    <select id="st" name="status_filter" data-autosubmit>
+      <option value="">{{ t('common.all') }}</option>
+      {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if status_filter == s }}>{{ s.replace('_',' ')|title }}</option>{% endfor %}
+    </select>
+  </div>
+  <noscript><button class="btn sm" type="submit">{{ t('common.filter') }}</button></noscript>
+</form>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Reference</th><th>{{ t('field.employee') }}</th><th>{{ t('field.month') }}</th>
+                 <th>Issue</th><th class="num">{{ t('money.difference') }}</th>
+                 <th>{{ t('field.status') }}</th><th>Raised</th><th></th></tr></thead>
+      <tbody>
+        {% for d in disputes %}
+        <tr>
+          <td class="mono tiny">{{ d.uid[:10] }}</td>
+          <td class="small">{{ d.employee.full_name }}</td>
+          <td class="small nowrap">{{ d.period.label if d.period else '—' }}</td>
+          <td class="small">{{ d.title[:60] }}</td>
+          <td class="num">{{ d.difference_paise|money(currency) if d.difference_paise is not none else '—' }}</td>
+          <td>{{ m.status_badge(d.status, 'ok' if d.status in ['RESOLVED','CLOSED'] else ('danger' if d.status == 'REJECTED' else 'warn')) }}</td>
+          <td class="tiny nowrap">{{ d.created_at|date }}</td>
+          <td><a class="btn sm ghost" href="/disputes/{{ d.uid }}">{{ t('btn.view') }}</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">{{ m.empty_state('No disputes have been raised.', '✓') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ t('btn.raise_dispute') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t('btn.raise_dispute') }}</h1>
+    <p class="sub">A factual statement is prepared for you from your own records.</p>
+  </div>
+</div>
+
+{{ m.alert('info', 'The statement below contains only figures and dates taken from your records. It asks for clarification and makes no allegation against anyone.') }}
+
+{% if not recon %}
+<div class="card">
+  <h2>Choose a month</h2>
+  {% if reconciliations %}
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>{{ t('field.employee') }}</th><th>{{ t('field.month') }}</th>
+                 <th class="num">{{ t('money.expected') }}</th><th class="num">{{ t('money.received') }}</th>
+                 <th class="num">{{ t('money.difference') }}</th><th>{{ t('field.status') }}</th><th></th></tr></thead>
+      <tbody>
+        {% for r in reconciliations %}
+        <tr>
+          <td class="small">{{ r.employee.full_name }}</td>
+          <td class="nowrap">{{ r.period.label }}</td>
+          <td class="num">{{ r.entitled_paise|money(currency) }}</td>
+          <td class="num">{{ r.credited_paise|money(currency) }}</td>
+          <td class="num">{{ m.money_cell(r.difference_paise, currency) }}</td>
+          <td>{{ m.outcome_badge(r.outcome, locale) }}</td>
+          <td><a class="btn sm secondary" href="/disputes/new?recon_uid={{ r.uid }}">Select</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    {{ m.empty_state('There are no months with an unresolved difference.', '✓') }}
+  {% endif %}
+</div>
+
+{% else %}
+
+<div class="card">
+  <h2>{{ recon.period.label }} — {{ recon.employee.full_name }}</h2>
+  <div class="grid grid-4">
+    {{ m.stat(t('money.expected'), recon.entitled_paise|money(currency), 'info') }}
+    {{ m.stat(t('money.sanctioned'),
+              recon.sanctioned_paise|money(currency) if recon.sanctioned_paise is not none else 'no record',
+              'info') }}
+    {{ m.stat(t('money.received'), recon.credited_paise|money(currency), 'ok') }}
+    {{ m.stat(t('money.difference'), recon.difference_paise|money(currency), 'danger') }}
+  </div>
+</div>
+
+<div class="card">
+  <h2>Prepared statement</h2>
+  <p class="small muted">Check this carefully. You can edit it before saving.</p>
+  <form method="post" action="/disputes" data-guard>
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="employee_id" value="{{ recon.employee_id }}">
+    <input type="hidden" name="recon_uid" value="{{ recon.uid }}">
+
+    <div class="form-row">
+      <div class="field">
+        <label for="title">Subject <span class="req">*</span></label>
+        <input id="title" type="text" name="title" required
+               value="{{ recon.period.label }} payment — request for clarification">
+      </div>
+      <div class="field">
+        <label for="issue_type">Issue</label>
+        <select id="issue_type" name="issue_type">
+          <option value="SHORT_PAYMENT">Less received than expected</option>
+          <option value="NOT_PAID">Payment not received</option>
+          <option value="UNEXPLAINED_DEDUCTION">Deduction without explanation</option>
+          <option value="DELAYED_PAYMENT">Payment delayed</option>
+          <option value="EXCESS_PAYMENT">More received than expected</option>
+          <option value="OTHER">Other</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="authority">Which office is this for?</label>
+        <input id="authority" type="text" name="authority"
+               placeholder="e.g. Child Development Project Officer, Sarojininagar">
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="description">Anything you want to add</label>
+      <textarea id="description" name="description" data-draft="dispute-desc"
+                placeholder="Optional — in your own words"></textarea>
+    </div>
+
+    <div class="field">
+      <label for="generated_report">Statement</label>
+      <textarea id="generated_report" name="generated_report" rows="22"
+                class="mono" style="font-size:.78rem">{{ prepared }}</textarea>
+    </div>
+
+    <button class="btn" type="submit" data-busy="Saving...">{{ t('btn.raise_dispute') }}</button>
+    <a class="btn ghost" href="/periods/{{ recon.uid }}">{{ t('btn.cancel') }}</a>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

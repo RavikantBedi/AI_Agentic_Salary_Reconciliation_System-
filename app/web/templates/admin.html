@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ t('nav.admin') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t('nav.admin') }}</h1>
+    <p class="sub">{{ organization.name }} · {{ totals.employees }} employee(s) · {{ year }}</p>
+  </div>
+  <div class="btn-row">
+    <form method="post" action="/process" data-guard>
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn" type="submit" data-busy="Processing...">Process everything</button>
+    </form>
+    <form method="post" action="/admin/monitor" data-guard>
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn secondary" type="submit" data-busy="Checking...">Run inspection</button>
+    </form>
+  </div>
+</div>
+
+<form method="get" class="filters">
+  <div class="field">
+    <label for="year">Year</label>
+    <select id="year" name="year" data-autosubmit>
+      {% for y in years %}<option value="{{ y }}" {{ 'selected' if y == year }}>{{ y }}</option>{% endfor %}
+    </select>
+  </div>
+  <noscript><button class="btn sm" type="submit">{{ t('common.filter') }}</button></noscript>
+</form>
+
+<div class="grid grid-4 mb2">
+  {{ m.stat('Employees', totals.employees, 'info') }}
+  {{ m.stat(t('money.expected'), totals.entitled_paise|money(currency), 'info') }}
+  {{ m.stat(t('money.sanctioned'), totals.sanctioned_paise|money(currency), 'info') }}
+  {{ m.stat(t('money.received'), totals.received_paise|money(currency), 'ok') }}
+  {{ m.stat(t('dashboard.total_pending'), totals.pending_paise|money(currency),
+            'danger' if totals.pending_paise else 'ok') }}
+  {{ m.stat('Excess credited', totals.excess_paise|money(currency),
+            'warn' if totals.excess_paise else 'ok') }}
+  {{ m.stat(t('dashboard.total_deductions'), totals.deducted_paise|money(currency), 'warn',
+            (totals.unexplained_paise|money(currency)) ~ ' unexplained') }}
+  {{ m.stat(t('dashboard.total_arrears'), totals.arrears_paise|money(currency),
+            'danger' if totals.arrears_paise else 'ok') }}
+</div>
+
+<div class="grid grid-2 mb2">
+  {{ m.stat('Unverified credits', totals.unverified,
+            'warn' if totals.unverified else 'ok',
+            'Not confirmed by an official document') }}
+  {{ m.stat('High-risk findings', totals.high_risk,
+            'danger' if totals.high_risk else 'ok', 'Open, high or critical') }}
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <h2 class="mb0">{{ t('action.title') }}</h2>
+    <a class="btn secondary sm" href="/action-center">Open →</a>
+  </div>
+  <div class="pill-row mb2">
+    <span class="badge danger"><span class="sym" aria-hidden="true">🔴</span>{{ monitor.critical|length }} {{ t('action.critical') }}</span>
+    <span class="badge warn"><span class="sym" aria-hidden="true">🟡</span>{{ monitor.review|length }} {{ t('action.review') }}</span>
+    <span class="badge ok"><span class="sym" aria-hidden="true">🟢</span>{{ monitor.reconciled_count }} {{ t('action.reconciled') }}</span>
+  </div>
+  <ul class="evidence-list">
+    {% for item in monitor.critical[:6] %}
+    <li><span>{{ m.severity_badge(item.severity) }} {{ item.title(locale) }}</span>
+      {% if item.link %}<a class="btn sm ghost" href="{{ item.link }}">{{ t('btn.view') }}</a>{% endif %}</li>
+    {% else %}
+    <li class="muted">{{ t('action.none') }}</li>
+    {% endfor %}
+  </ul>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <h2 class="mb0">Salary periods</h2>
+    <a class="btn secondary sm" href="/data-quality">{{ t('nav.data_quality') }} →</a>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>{{ t('field.month') }}</th><th>Cycle</th><th>Expected pay date</th>
+                 <th>{{ t('field.status') }}</th><th></th></tr></thead>
+      <tbody>
+        {% for p in periods %}
+        <tr>
+          <td class="nowrap"><strong>{{ p.label }}</strong></td>
+          <td class="tiny">{{ p.cycle_start|date }} — {{ p.cycle_end|date }}</td>
+          <td class="tiny">{{ p.expected_pay_date|date }}</td>
+          <td>{{ m.status_badge(p.status, 'ok' if p.status == 'CLOSED' else 'neutral') }}</td>
+          <td>
+            {% if not is_read_only %}
+              {% if p.status != 'CLOSED' %}
+              <form method="post" action="/periods/{{ p.id }}/close">
+                <input type="hidden" name="csrf" value="{{ csrf }}">
+                <input type="hidden" name="reason" value="Monthly close">
+                <button class="btn sm secondary" type="submit"
+                        data-confirm="Close {{ p.label }}? Its figures will be frozen. Later changes will still be possible but will require a reason and be recorded in the audit log.">Close month</button>
+              </form>
+              {% else %}
+              <form method="post" action="/periods/{{ p.id }}/reopen" class="flex">
+                <input type="hidden" name="csrf" value="{{ csrf }}">
+                <input type="text" name="reason" placeholder="Reason (required)" required style="min-width:150px">
+                <button class="btn sm ghost" type="submit">Reopen</button>
+              </form>
+              {% endif %}
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <h2 class="mb0">Employees</h2>
+    <a class="btn secondary sm" href="/employees">View all →</a>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Name</th><th>{{ t('field.employee_code') }}</th><th>{{ t('field.designation') }}</th>
+                 <th>{{ t('field.location') }}</th><th></th></tr></thead>
+      <tbody>
+        {% for e in employees %}
+        <tr>
+          <td><a href="/employees/{{ e.uid }}">{{ e.full_name }}</a></td>
+          <td class="mono tiny">{{ e.employee_code }}</td>
+          <td class="small">{{ e.designation.name if e.designation else '—' }}</td>
+          <td class="small">{{ e.location.name if e.location else '—' }}</td>
+          <td><a class="btn sm ghost" href="/?employee_uid={{ e.uid }}">Dashboard</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

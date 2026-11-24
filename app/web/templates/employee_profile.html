@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ employee.full_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ employee.full_name }}</h1>
+    <p class="sub">{{ employee.employee_code }}
+      {% if employee.designation %}· {{ employee.designation.name }}{% endif %}
+      {% if employee.location %}· {{ employee.location.path }}{% endif %}</p>
+  </div>
+  <div class="btn-row">
+    <a class="btn secondary" href="/?employee_uid={{ employee.uid }}">Dashboard</a>
+    <a class="btn secondary" href="/transactions?employee_uid={{ employee.uid }}">{{ t('nav.transactions') }}</a>
+    <a class="btn" href="/reports/view/employee_statement?employee_uid={{ employee.uid }}">Statement</a>
+  </div>
+</div>
+
+<div class="mb2">{{ m.health_card(health, locale) }}</div>
+
+<div class="card">
+  <h2>Profile</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <tbody>
+        <tr><th style="width:210px">{{ t('field.employee_code') }}</th><td class="mono">{{ employee.employee_code }}</td></tr>
+        <tr><th>{{ t('field.designation') }}</th><td>{{ employee.designation.name if employee.designation else '—' }}</td></tr>
+        <tr><th>{{ t('field.department') }}</th><td>{{ employee.department.name if employee.department else '—' }}</td></tr>
+        <tr><th>{{ t('field.scheme') }}</th><td>{{ employee.scheme.name if employee.scheme else '—' }}</td></tr>
+        <tr><th>{{ t('field.location') }}</th><td>{{ employee.location.path if employee.location else '—' }}</td></tr>
+        <tr><th>Joining date</th><td>{{ employee.joining_date|date }}</td></tr>
+        {% if employee.relieving_date %}<tr><th>Relieving date</th><td>{{ employee.relieving_date|date }}</td></tr>{% endif %}
+        <tr><th>{{ t('field.status') }}</th><td>{{ m.status_badge(employee.status, 'ok' if employee.status == 'ACTIVE' else 'neutral') }}</td></tr>
+        <tr><th>Applicable rule today</th>
+            <td>{% if current_rule %}<a href="/rules/{{ current_rule.uid }}">{{ current_rule.label }}</a> — {{ current_rule.name }}
+                {% else %}<span class="badge warn"><span class="sym" aria-hidden="true">⚠</span>No rule matches</span>{% endif %}</td></tr>
+        <tr><th>Contact</th><td>{{ employee.phone or '—' }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Bank accounts</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>{{ t('field.bank') }}</th><th>Account</th><th>IFSC</th>
+                 <th>Effective from</th><th>Effective to</th><th></th></tr></thead>
+      <tbody>
+        {% for a in employee.bank_accounts %}
+        <tr>
+          <td>{{ a.bank_name or '—' }}</td>
+          <td class="mono">{{ a.masked }}</td>
+          <td class="mono tiny">{{ a.ifsc or '—' }}</td>
+          <td class="tiny">{{ a.effective_from|date }}</td>
+          <td class="tiny">{{ a.effective_to|date if a.effective_to else 'Current' }}</td>
+          <td>{% if a.is_primary %}<span class="badge ok">Primary</span>{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="muted">No bank account is recorded. Payments cannot be matched by account.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="tiny muted mt1">Account numbers are stored encrypted. Only the last four digits
+    are ever displayed, and an account change is time-bounded so it never looks like a
+    duplicate payment.</p>
+</div>
+
+<div class="card">
+  <h2>Payment history</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>{{ t('field.month') }}</th><th class="num">{{ t('money.expected') }}</th>
+                 <th class="num">{{ t('money.sanctioned') }}</th><th class="num">{{ t('money.received') }}</th>
+                 <th class="num">{{ t('money.difference') }}</th><th>{{ t('field.status') }}</th><th></th></tr></thead>
+      <tbody>
+        {% for r in recons %}
+        <tr>
+          <td class="nowrap">{{ r.period.label }}</td>
+          <td class="num">{{ r.entitled_paise|money(currency) }}</td>
+          <td class="num">{% if r.sanctioned_paise is not none %}{{ r.sanctioned_paise|money(currency) }}{% else %}<span class="muted tiny">no record</span>{% endif %}</td>
+          <td class="num">{{ r.credited_paise|money(currency) }}</td>
+          <td class="num">{{ m.money_cell(r.difference_paise, currency) }}</td>
+          <td>{{ m.outcome_badge(r.outcome, locale) }}</td>
+          <td><a class="btn sm ghost" href="/periods/{{ r.uid }}">{{ t('btn.view') }}</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">{{ m.empty_state(t('common.no_records')) }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="grid grid-2">
+  <div class="card">
+    <h2>Recent transactions</h2>
+    <ul class="evidence-list">
+      {% for txn in transactions[:12] %}
+      <li>
+        <span>{{ txn.txn_date|date }} — <a href="/transactions/{{ txn.uid }}">{{ txn.amount_paise|money(currency) }}</a>
+          <span class="tiny muted"><br>{{ (txn.description or '')[:60] }}</span></span>
+        <span class="badge neutral tiny">{{ txn.classification.replace('_',' ')|title }}</span>
+      </li>
+      {% else %}<li class="muted">No transactions recorded.</li>{% endfor %}
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>{{ t('nav.documents') }}</h2>
+    <ul class="evidence-list">
+      {% for d in documents[:12] %}
+      <li><a href="/documents/{{ d.uid }}">{{ d.title }}</a>
+          <span class="badge neutral tiny">{{ d.category.replace('_',' ')|title }}</span></li>
+      {% else %}<li class="muted">No documents linked.</li>{% endfor %}
+    </ul>
+  </div>
+</div>
+
+{% if disputes %}
+<div class="card">
+  <h2>{{ t('nav.disputes') }}</h2>
+  <ul class="evidence-list">
+    {% for d in disputes %}
+    <li><a href="/disputes/{{ d.uid }}">{{ d.title }}</a>
+        {{ m.status_badge(d.status, 'ok' if d.status in ['RESOLVED','CLOSED'] else 'warn') }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>{{ t('nav.audit') }}</h2>
+  {% if audit_entries %}
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>When</th><th>Who</th><th>What</th><th>{{ t('field.reason') }}</th></tr></thead>
+      <tbody>
+        {% for e in audit_entries %}
+        <tr><td class="tiny nowrap">{{ e.created_at|datetime }}</td>
+            <td class="tiny">{{ e.actor_label }}</td>
+            <td class="tiny">{{ e.action.replace('_',' ')|title }}</td>
+            <td class="tiny">{{ e.reason or '—' }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}<p class="muted small">No changes recorded.</p>{% endif %}
+</div>
+{% endblock %}

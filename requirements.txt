@@ -1,0 +1,37 @@
+# ---------------------------------------------------------------------------
+# AI-Agentic Salary & Payment Reconciliation System - Python dependencies
+# ---------------------------------------------------------------------------
+
+# --- Web / API ---
+fastapi>=0.115
+uvicorn[standard]>=0.34
+jinja2>=3.1
+python-multipart>=0.0.20
+itsdangerous>=2.2
+
+# --- Database ---
+SQLAlchemy>=2.0.36
+
+# --- Security ---
+passlib>=1.7.4
+bcrypt>=4.2
+cryptography>=44.0
+
+# --- Document / bank-statement parsing ---
+pdfplumber>=0.11
+pypdf>=5.1
+openpyxl>=3.1
+pillow>=11.0
+
+# --- Reporting (PDF / Excel export) ---
+reportlab>=4.2
+
+# --- Optional AI reasoning layer -------------------------------------------
+#     No provider SDK is required. Groq, Gemini, OpenRouter, Ollama and
+#     Anthropic are all reached over plain HTTPS using httpx (listed above),
+#     so enabling the narrative layer installs nothing extra.
+#     Every engine is deterministic; the system works fully without it.
+
+# --- Testing ---
+pytest>=8.3
+httpx>=0.28

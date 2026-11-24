@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ t('nav.audit') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t('nav.audit') }}</h1>
+    <p class="sub">{{ total }} entries. This log is append-only — nothing here can be edited
+      or deleted.</p>
+  </div>
+</div>
+
+<form method="get" class="filters">
+  <div class="field">
+    <label for="et">Record type</label>
+    <select id="et" name="entity_type" data-autosubmit>
+      <option value="">{{ t('common.all') }}</option>
+      {% for e in entity_types %}<option value="{{ e }}" {{ 'selected' if entity_type == e }}>{{ e }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="ac">Action</label>
+    <select id="ac" name="action" data-autosubmit>
+      <option value="">{{ t('common.all') }}</option>
+      {% for a in actions %}<option value="{{ a }}" {{ 'selected' if action == a }}>{{ a.replace('_',' ')|title }}</option>{% endfor %}
+    </select>
+  </div>
+  <a class="btn sm ghost" href="/audit">Clear</a>
+</form>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Record</th>
+                 <th>Changed</th><th>{{ t('field.reason') }}</th><th>Source</th></tr></thead>
+      <tbody>
+        {% for e in entries %}
+        <tr>
+          <td class="tiny nowrap">{{ e.created_at|datetime }}</td>
+          <td class="tiny">{{ e.actor_label }}</td>
+          <td class="tiny"><strong>{{ e.action.replace('_',' ')|title }}</strong></td>
+          <td class="tiny">{{ e.entity_type }}{% if e.entity_id %} #{{ e.entity_id }}{% endif %}
+            {% if e.entity_uid %}<br><span class="mono">{{ e.entity_uid[:10] }}</span>{% endif %}</td>
+          <td class="tiny" style="max-width:280px">
+            {% if e.old_value_json or e.new_value_json %}
+            <details>
+              <summary>View</summary>
+              {% if e.old_value_json %}<div><strong>Before:</strong> <span class="mono">{{ e.old_value_json }}</span></div>{% endif %}
+              {% if e.new_value_json %}<div><strong>After:</strong> <span class="mono">{{ e.new_value_json }}</span></div>{% endif %}
+            </details>
+            {% else %}—{% endif %}
+          </td>
+          <td class="tiny">{{ e.reason or '—' }}</td>
+          <td class="tiny">
+            <span class="badge {{ 'info' if e.source == 'HUMAN' else 'neutral' }}">{{ e.source }}</span>
+            {% if e.ip_address %}<br><span class="mono">{{ e.ip_address }}</span>{% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">{{ m.empty_state('No audit entries match these filters.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% set base = '/audit?' ~ ('entity_type=' ~ entity_type ~ '&amp;' if entity_type else '') ~ ('action=' ~ action ~ '&amp;' if action else '') %}
+  {{ m.pager(page, pages, base) }}
+</div>
+{% endblock %}

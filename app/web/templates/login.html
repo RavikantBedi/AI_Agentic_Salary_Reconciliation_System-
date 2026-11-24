@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="{{ locale }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ t('auth.login') }} - {{ t('app.name') }}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#8377;</text></svg>">
+  <style>
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:1rem; }
+    .login-wrap { width:100%; max-width:430px; }
+    .login-head { text-align:center; margin-bottom:1.1rem; }
+    .login-head .mark { font-size:2.4rem; color:var(--brand); line-height:1; }
+    .login-head h1 { margin:.4rem 0 .2rem; font-size:1.3rem; }
+    .demo { font-size:.8rem; }
+    .demo table { width:100%; border-collapse:collapse; }
+    .demo td { padding:.3rem .25rem; border-bottom:1px solid var(--line-soft); vertical-align:top; }
+    .demo code { font-family:var(--mono); font-size:.76rem; }
+  </style>
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-head">
+    <div class="mark" aria-hidden="true">&#8377;</div>
+    <h1>{{ t('app.name') }}</h1>
+    <p class="muted small">{{ t('app.tagline') }}</p>
+    <div class="lang-toggle" style="display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden">
+      <a href="?lang=en" class="{{ 'active' if locale=='en' }}" style="padding:.3rem .7rem;background:{{ 'var(--brand)' if locale=='en' else '#fff' }};color:{{ '#fff' if locale=='en' else 'var(--ink-soft)' }}">English</a>
+      <a href="?lang=hi" class="{{ 'active' if locale=='hi' }}" style="padding:.3rem .7rem;background:{{ 'var(--brand)' if locale=='hi' else '#fff' }};color:{{ '#fff' if locale=='hi' else 'var(--ink-soft)' }}">हिंदी</a>
+    </div>
+  </div>
+
+  {% if no_accounts %}
+  <div class="card">
+    <h3 style="font-size:.95rem">No accounts exist yet</h3>
+    <p class="small muted">This is a fresh installation. Open a terminal in the
+      application folder and run <strong>one</strong> of these:</p>
+    <p class="small" style="margin:.4rem 0"><code class="mono">python manage.py seed</code><br>
+      <span class="muted tiny">Loads a demonstration organisation so you can look around.</span></p>
+    <p class="small" style="margin:.4rem 0"><code class="mono">python manage.py createadmin</code><br>
+      <span class="muted tiny">Creates your own administrator account to start real work.</span></p>
+    <p class="tiny muted">Then reload this page.</p>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    {% if error %}
+    <div class="alert danger"><span class="sym" aria-hidden="true">&#9888;</span><span>{{ error }}</span></div>
+    {% endif %}
+
+    <form method="post" action="/login" data-guard>
+      <input type="hidden" name="next" value="{{ next }}">
+      <div class="field">
+        <label for="email">{{ t('auth.email') }}</label>
+        <input id="email" type="email" name="email" required autocomplete="username" autofocus inputmode="email">
+      </div>
+      <div class="field">
+        <label for="password">{{ t('auth.password') }}</label>
+        <input id="password" type="password" name="password" required autocomplete="current-password">
+      </div>
+      <button class="btn block" type="submit" data-busy="Signing in...">{{ t('auth.login') }}</button>
+    </form>
+  </div>
+
+  {% if demo_accounts %}
+  <div class="card demo">
+    <h3 style="font-size:.9rem">Demo accounts</h3>
+    <p class="muted tiny mb1">This system has been seeded with demonstration data. Each account
+      shows a different level of access.</p>
+    <table>
+      {% for acct in demo_accounts %}
+      <tr>
+        <td><code>{{ acct.email }}</code><br><span class="muted tiny">{{ acct.label }}</span></td>
+        <td class="right"><code>{{ acct.password }}</code></td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+</div>
+<script src="/static/app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ report.title }}{% endblock %}
+{% block content %}
+<div class="page-head no-print">
+  <div>
+    <h1>{{ report.title }}</h1>
+    <p class="sub">{{ report.subtitle }} · generated {{ report.generated_at|datetime }}</p>
+  </div>
+  <div class="btn-row">
+    {% set suffix = '?year=' ~ year ~ ('&amp;employee_uid=' ~ employee.uid if employee else '') %}
+    <a class="btn" href="/reports/export/{{ report_type }}.pdf{{ suffix }}">PDF</a>
+    <a class="btn secondary" href="/reports/export/{{ report_type }}.excel{{ suffix }}">Excel</a>
+    <a class="btn secondary" href="/reports/export/{{ report_type }}.csv{{ suffix }}">CSV</a>
+    <button class="btn ghost" onclick="window.print()">Print</button>
+  </div>
+</div>
+
+{% if report.meta %}
+<div class="card">
+  <div class="table-wrap">
+    <table class="data">
+      <tbody>
+        {% for k, v in report.meta.items() %}
+        <tr><th style="width:220px">{{ k }}</th><td>{{ v }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% for table in report.tables %}
+<div class="card">
+  <h2>{{ table.title }}</h2>
+  {% if table.note %}<p class="small muted">{{ table.note }}</p>{% endif %}
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>{% for c in table.columns %}
+          <th class="{{ 'num' if c in ['Expected','Sanctioned','Received','Difference','Amount','Outstanding','Entitled','Settled','Count','Entitlement','Sanction','Disbursement','Bank credit','Delay (days)'] }}">{{ c }}</th>
+        {% endfor %}</tr>
+      </thead>
+      <tbody>
+        {% for row in table.rows %}
+        <tr>{% for cell in row %}
+          <td class="{{ 'num' if loop.index0 > 0 and (cell is string and (cell.startswith('₹') or cell.startswith('-₹'))) }}">{{ cell }}</td>
+        {% endfor %}</tr>
+        {% else %}
+        <tr><td colspan="{{ table.columns|length }}">{{ m.empty_state('No records.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+      {% if table.totals %}
+      <tfoot>
+        <tr>{% for cell in table.totals %}<td>{{ cell }}</td>{% endfor %}</tr>
+      </tfoot>
+      {% endif %}
+    </table>
+  </div>
+</div>
+{% endfor %}
+
+{# ---------------- Provenance labelling (spec s92) ---------------- #}
+{% if report.provenance_notes %}
+<div class="card">
+  <h2>How to read this report</h2>
+  <p class="small muted">Each statement below is labelled with its standing, so it is clear
+    what is evidenced, what is official, what the system inferred, and what is not yet verified.</p>
+  <ul class="evidence-list">
+    {% for provenance, text in report.provenance_notes %}
+    <li>
+      <span>
+        <span class="badge {{ 'ok' if provenance in ['FACT','OFFICIAL'] else ('info' if provenance == 'INFERENCE' else 'warn') }}">
+          {{ provenance_labels.get(provenance, provenance) }}
+        </span>
+        <span class="small">{{ text }}</span>
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+{% endblock %}

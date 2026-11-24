@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ t('nav.transactions') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t('nav.transactions') }}</h1>
+    <p class="sub">{{ total }} record(s){% if selected_employee %} · {{ selected_employee.full_name }}{% endif %}</p>
+  </div>
+  {% if not is_read_only %}
+  <div class="btn-row">
+    <a class="btn secondary" href="/payments/manual">Record a payment by hand</a>
+    <a class="btn" href="/import">{{ t('nav.import') }}</a>
+  </div>
+  {% endif %}
+</div>
+
+<form method="get" class="filters">
+  <div class="field">
+    <label for="q">{{ t('common.search') }}</label>
+    <input id="q" type="search" name="q" value="{{ filters.q or '' }}" placeholder="Narration, UTR, sender">
+  </div>
+  {% if employees|length > 1 %}
+  <div class="field">
+    <label for="emp">{{ t('field.employee') }}</label>
+    <select id="emp" name="employee_uid" data-autosubmit>
+      <option value="">{{ t('common.all') }}</option>
+      {% for e in employees %}<option value="{{ e.uid }}" {{ 'selected' if selected_employee and selected_employee.id == e.id }}>{{ e.full_name }}</option>{% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="field">
+    <label for="st">{{ t('field.status') }}</label>
+    <select id="st" name="status_filter" data-autosubmit>
+      <option value="">{{ t('common.all') }}</option>
+      {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if filters.status == s }}>{{ s.replace('_',' ')|title }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="cl">{{ t('field.classification') }}</label>
+    <select id="cl" name="classification" data-autosubmit>
+      <option value="">{{ t('common.all') }}</option>
+      {% for c in classifications %}<option value="{{ c }}" {{ 'selected' if filters.classification == c }}>{{ c.replace('_',' ')|title }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="minamt">Amount above</label>
+    <input id="minamt" type="text" name="min_amount" value="{{ filters.min_amount or '' }}" inputmode="decimal" placeholder="e.g. 15000">
+  </div>
+  <button class="btn sm" type="submit">{{ t('common.filter') }}</button>
+  <a class="btn sm ghost" href="/transactions">Clear</a>
+</form>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>{{ t('field.date') }}</th>
+          {% if not selected_employee %}<th>{{ t('field.employee') }}</th>{% endif %}
+          <th>{{ t('field.narration') }}</th>
+          <th class="num">{{ t('money.amount') }}</th>
+          <th>{{ t('field.classification') }}</th>
+          <th>{{ t('field.month') }}</th>
+          <th>{{ t('field.status') }}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for txn in transactions %}
+        <tr>
+          <td class="nowrap">{{ txn.txn_date|date }}
+            {% if txn.is_cash %}<br><span class="badge warn tiny"><span class="sym" aria-hidden="true">⚠</span>Cash</span>{% endif %}
+          </td>
+          {% if not selected_employee %}
+          <td class="small">{{ txn.employee.full_name if txn.employee else '<unassigned>' }}</td>
+          {% endif %}
+          <td class="small" style="max-width:280px">{{ (txn.description or '')[:110] }}
+            {% if txn.utr %}<br><span class="mono tiny muted">{{ txn.utr }}</span>{% endif %}
+          </td>
+          <td class="num nowrap">
+            {% if txn.direction == 'CREDIT' %}<span class="money-ok">+{{ txn.amount_paise|money(currency) }}</span>
+            {% else %}<span class="money-short">−{{ txn.amount_paise|money(currency) }}</span>{% endif %}
+          </td>
+          <td>
+            <span class="badge neutral">{{ txn.classification.replace('_',' ')|title }}</span>
+            {% if txn.classification_confidence %}<br>{{ m.confidence_badge(txn.classification_confidence) }}{% endif %}
+          </td>
+          <td class="small">
+            {% for a in txn.allocations if a.status != 'REJECTED' %}
+              {{ a.period.label if a.period else '—' }}{% if not loop.last %}, {% endif %}
+            {% else %}<span class="muted">—</span>{% endfor %}
+          </td>
+          <td>{{ m.status_badge(txn.status, 'ok' if txn.status in ['RECONCILED','MATCHED'] else ('danger' if txn.status == 'REVERSED' else 'warn')) }}</td>
+          <td><a class="btn sm ghost" href="/transactions/{{ txn.uid }}">{{ t('btn.view') }}</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">{{ m.empty_state(t('common.no_records')) }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% set base = '/transactions?' ~ ('q=' ~ filters.q ~ '&amp;' if filters.q else '') ~ ('status_filter=' ~ filters.status ~ '&amp;' if filters.status else '') %}
+  {{ m.pager(page, pages, base) }}
+</div>
+{% endblock %}

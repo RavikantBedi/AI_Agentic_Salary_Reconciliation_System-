@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ document.title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ document.title }}</h1>
+    <p class="sub">{{ document.category.replace('_',' ')|title }} · version {{ document.version }}
+      · uploaded {{ document.created_at|datetime }}</p>
+  </div>
+  <div class="btn-row">
+    <a class="btn" href="/documents/{{ document.uid }}/download">{{ t('btn.download') }}</a>
+    <a class="btn secondary" href="/documents/{{ document.uid }}/download?inline=1" target="_blank" rel="noopener">Open</a>
+  </div>
+</div>
+
+{% if not document.is_current %}
+{{ m.alert('warn', 'This is an older version of the document. A newer version exists.') }}
+{% endif %}
+
+<div class="card">
+  <h2>File details</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <tbody>
+        <tr><th style="width:210px">Original file name</th><td>{{ document.original_filename }}</td></tr>
+        <tr><th>Type</th><td>{{ document.mime_type or '—' }}</td></tr>
+        <tr><th>Size</th><td>{{ (document.size_bytes / 1024)|round(1) }} KB</td></tr>
+        <tr><th>Pages</th><td>{{ document.page_count or '—' }}</td></tr>
+        <tr><th>Checksum (SHA-256)</th><td class="mono tiny">{{ document.sha256 }}</td></tr>
+        <tr><th>Document date</th><td>{{ document.document_date|date }}</td></tr>
+        <tr><th>Issuing authority</th><td>{{ document.issuing_authority or '—' }}</td></tr>
+        <tr><th>Reference number</th><td class="mono">{{ document.reference_number or '—' }}</td></tr>
+        <tr><th>Uploaded by</th><td>{{ document.uploaded_by_id and 'User #' ~ document.uploaded_by_id or 'System' }}</td></tr>
+        {% if document.replacement_reason %}
+        <tr><th>Reason for replacement</th><td>{{ document.replacement_reason }}</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+  <p class="tiny muted mt1">The checksum lets anyone confirm this file has not been altered
+    since it was uploaded.</p>
+</div>
+
+{# ---------------- Extraction (spec s43) ---------------- #}
+<div class="card">
+  <h2>What was read from this document</h2>
+  <div class="flex mb2">
+    {% if document.ocr_status == 'COMPLETED' %}<span class="badge ok"><span class="sym" aria-hidden="true">✓</span>Read successfully</span>
+    {% elif document.ocr_status == 'UNAVAILABLE' %}<span class="badge warn"><span class="sym" aria-hidden="true">⚠</span>Could not be read automatically</span>
+    {% elif document.ocr_status == 'PARTIAL' %}<span class="badge warn"><span class="sym" aria-hidden="true">⚠</span>Partly read</span>
+    {% elif document.ocr_status == 'FAILED' %}<span class="badge danger"><span class="sym" aria-hidden="true">✕</span>Failed</span>
+    {% else %}<span class="badge neutral"><span class="sym" aria-hidden="true">•</span>{{ document.ocr_status|title }}</span>{% endif %}
+    {% if document.extraction_confidence %}{{ m.confidence_badge(document.extraction_confidence) }}{% endif %}
+  </div>
+
+  {% if extraction.guidance %}
+    {{ m.alert('warn', extraction.guidance) }}
+  {% endif %}
+  {% if document.extraction_error %}
+    {{ m.alert('danger', document.extraction_error) }}
+  {% endif %}
+
+  {% if extraction.fields %}
+  <h3>Fields found</h3>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Field</th><th>Value</th></tr></thead>
+      <tbody>
+        {% for k, v in extraction.fields.items() %}
+        <tr><td>{{ k.replace('_',' ')|title }}</td>
+            <td class="mono small">{% if k.endswith('_amount') %}{{ v|money(currency) }}{% else %}{{ v }}{% endif %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {{ m.alert('info', 'Confidence reflects how certain the reading was. It is not proof of a financial fact. Nothing extracted here changes a ledger figure until a person applies it.') }}
+  {% else %}
+    <p class="muted small">No structured fields were recognised in this document.</p>
+  {% endif %}
+
+  {% if document.extracted_text %}
+  <details class="mt2">
+    <summary class="small">Show the text that was read</summary>
+    <pre class="explain-box mono tiny mt1" style="max-height:340px;overflow:auto">{{ document.extracted_text[:6000] }}</pre>
+  </details>
+  {% endif %}
+
+  {% if not is_read_only %}
+  <form method="post" action="/documents/{{ document.uid }}/reprocess" class="mt2">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="btn secondary sm" type="submit">Read this document again</button>
+  </form>
+  {% endif %}
+</div>
+
+{# ---------------- Verification (spec s28, s84) ---------------- #}
+<div class="card">
+  <h2>{{ t('nav.verification') }}</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Dimension</th><th>Level</th><th>Source</th><th>When</th></tr></thead>
+      <tbody>
+        {% for dim, state in verification.items() %}
+        <tr>
+          <td class="small">{{ dim.replace('_',' ')|title }}</td>
+          <td>{{ m.verification_badge(state.level, locale) }}</td>
+          <td class="small">{{ state.source }}</td>
+          <td class="small nowrap">{{ state.verified_on|date }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if not is_read_only %}
+  <div class="divider"></div>
+  <h3>Record a verification</h3>
+  <form method="post" action="/documents/{{ document.uid }}/verify">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="form-row">
+      <div class="field">
+        <label for="dimension">What does this document prove?</label>
+        <select id="dimension" name="dimension">
+          {% for d in VerificationDimension.values() %}
+          <option value="{{ d }}">{{ d.replace('_',' ')|title }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="level">Evidence level</label>
+        <select id="level" name="level">
+          {% for lvl, label in levels %}<option value="{{ lvl }}">{{ label }}</option>{% endfor %}
+        </select>
+        <div class="hint">Level 4 (authorised API) cannot be set by hand — only a real
+          integration can record it.</div>
+      </div>
+      <div class="field">
+        <label for="source">Source <span class="req">*</span></label>
+        <input id="source" type="text" name="source" required
+               placeholder="e.g. Sanction order from CDPO office">
+      </div>
+    </div>
+    <div class="field">
+      <label for="vnote">Note</label>
+      <input id="vnote" type="text" name="note">
+    </div>
+    <button class="btn" type="submit">{{ t('btn.confirm') }}</button>
+  </form>
+  {% endif %}
+</div>
+
+{# ---------------- Linked records ---------------- #}
+{% if links %}
+<div class="card">
+  <h2>What this document supports</h2>
+  <ul class="evidence-list">
+    {% for l in links %}
+    <li><span>{{ l.entity_type }} #{{ l.entity_id }}{% if l.note %} — {{ l.note }}{% endif %}</span>
+        <span class="badge {{ 'ok' if l.role == 'PRIMARY' else 'neutral' }}">{{ l.role|title }}</span></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{# ---------------- Versions (spec s42) ---------------- #}
+{% if versions|length > 1 or newer_versions %}
+<div class="card">
+  <h2>Version history</h2>
+  <p class="small muted">Replacing a document never overwrites the old one.</p>
+  <ul class="evidence-list">
+    {% for v in newer_versions %}
+    <li><span><a href="/documents/{{ v.uid }}">Version {{ v.version }}</a> — {{ v.created_at|datetime }}
+      {% if v.replacement_reason %}<br><span class="tiny muted">{{ v.replacement_reason }}</span>{% endif %}</span>
+      <span class="badge ok">Newer</span></li>
+    {% endfor %}
+    {% for v in versions %}
+    <li><span><a href="/documents/{{ v.uid }}">Version {{ v.version }}</a> — {{ v.created_at|datetime }}</span>
+      {% if v.id == document.id %}<span class="badge info">Viewing</span>
+      {% else %}<span class="badge neutral">Older</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if not is_read_only %}
+<div class="card">
+  <h2>Replace this document</h2>
+  <form method="post" action="/documents/upload" enctype="multipart/form-data" data-guard>
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="supersedes_uid" value="{{ document.uid }}">
+    <input type="hidden" name="category" value="{{ document.category }}">
+    {% if document.employee_id %}<input type="hidden" name="employee_id" value="{{ document.employee_id }}">{% endif %}
+    <div class="form-row">
+      <div class="field">
+        <label for="newdoc">Replacement file <span class="req">*</span></label>
+        <input id="newdoc" type="file" name="document" required>
+      </div>
+      <div class="field">
+        <label for="rreason">Why is it being replaced? <span class="req">*</span></label>
+        <input id="rreason" type="text" name="replacement_reason" required
+               placeholder="e.g. clearer scan of the same order">
+      </div>
+    </div>
+    <button class="btn secondary" type="submit">Upload as a new version</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>{{ t('nav.audit') }}</h2>
+  {% if audit_entries %}
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>When</th><th>Who</th><th>What</th><th>{{ t('field.reason') }}</th></tr></thead>
+      <tbody>
+        {% for e in audit_entries %}
+        <tr><td class="tiny nowrap">{{ e.created_at|datetime }}</td>
+            <td class="tiny">{{ e.actor_label }}</td>
+            <td class="tiny">{{ e.action.replace('_',' ')|title }}</td>
+            <td class="tiny">{{ e.reason or '—' }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}<p class="muted small">No history recorded.</p>{% endif %}
+</div>
+{% endblock %}

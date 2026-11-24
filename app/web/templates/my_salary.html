@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ t('nav.my_salary') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t('nav.my_salary') }} — {{ year }}</h1>
+    <p class="sub">{{ employee.full_name }} · {{ employee.employee_code }}</p>
+  </div>
+  <div class="btn-row">
+    <a class="btn secondary" href="/reports/view/employee_statement?year={{ year }}&amp;employee_uid={{ employee.uid }}">{{ t('nav.reports') }}</a>
+    <a class="btn" href="/reports/export/employee_statement.pdf?year={{ year }}&amp;employee_uid={{ employee.uid }}">{{ t('btn.download') }} PDF</a>
+  </div>
+</div>
+
+<form method="get" class="filters">
+  <input type="hidden" name="employee_uid" value="{{ employee.uid }}">
+  <div class="field">
+    <label for="year">Year</label>
+    <select id="year" name="year" data-autosubmit>
+      {% for y in years %}<option value="{{ y }}" {{ 'selected' if y == year }}>{{ y }}</option>{% endfor %}
+    </select>
+  </div>
+  <noscript><button class="btn sm" type="submit">{{ t('common.filter') }}</button></noscript>
+</form>
+
+<div class="grid grid-4 mb2">
+  {{ m.stat(t('money.expected'), annual.entitled_paise|money(currency), 'info') }}
+  {{ m.stat(t('money.sanctioned'), annual.sanctioned_paise|money(currency), 'info') }}
+  {{ m.stat(t('money.received'), annual.received_paise|money(currency), 'ok') }}
+  {{ m.stat(t('money.outstanding'), annual.arrears_outstanding_paise|money(currency),
+            'danger' if annual.arrears_outstanding_paise else 'ok') }}
+</div>
+
+<div class="grid grid-4 mb2">
+  {{ m.stat('Months reconciled', (annual.months_reconciled ~ ' / ' ~ annual.months_total), 'ok') }}
+  {{ m.stat('Average delay',
+            (annual.average_delay_days ~ ' ' ~ t('field.days')) if annual.average_delay_days else 'No delays',
+            'warn' if annual.average_delay_days else 'ok') }}
+  {{ m.stat('Officially verified', annual.verification_percent ~ '%',
+            'ok' if annual.verification_percent > 50 else 'warn',
+            'Confirmed by an official document') }}
+  {{ m.stat('Unexplained difference', annual.unexplained_difference_paise|money(currency),
+            'danger' if annual.unexplained_difference_paise else 'ok') }}
+</div>
+
+<div class="card">
+  <h2>{{ t('dashboard.timeline') }}</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>{{ t('field.month') }}</th>
+          <th class="num">{{ t('money.expected') }}</th>
+          <th class="num">{{ t('money.sanctioned') }}</th>
+          <th class="num">{{ t('money.received') }}</th>
+          <th class="num">{{ t('money.difference') }}</th>
+          <th class="num">{{ t('field.delay') }}</th>
+          <th>{{ t('field.status') }}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in recons %}
+        <tr>
+          <td class="nowrap"><strong>{{ r.period.label if locale != 'hi' else r.period.label_hi }}</strong></td>
+          <td class="num">{{ r.entitled_paise|money(currency) }}</td>
+          <td class="num">{% if r.sanctioned_paise is not none %}{{ r.sanctioned_paise|money(currency) }}{% else %}<span class="muted tiny">no record</span>{% endif %}</td>
+          <td class="num">{{ r.credited_paise|money(currency) }}</td>
+          <td class="num">{{ m.money_cell(r.difference_paise, currency) }}</td>
+          <td class="num">{{ r.delay_days if r.delay_days is not none else '—' }}</td>
+          <td>{{ m.outcome_badge(r.outcome, locale) }}</td>
+          <td><a class="btn sm ghost" href="/periods/{{ r.uid }}">{{ t('btn.explain') }}</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">{{ m.empty_state(t('common.no_records')) }}</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td>{{ t('common.total') }}</td>
+          <td class="num">{{ recons|sum(attribute='entitled_paise')|money(currency) }}</td>
+          <td class="num"></td>
+          <td class="num">{{ recons|sum(attribute='credited_paise')|money(currency) }}</td>
+          <td class="num">{{ recons|sum(attribute='difference_paise')|money(currency) }}</td>
+          <td colspan="3"></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+{% endblock %}

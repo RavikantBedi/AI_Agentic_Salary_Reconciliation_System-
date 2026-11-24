@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ t('nav.import') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Upload a bank statement</h1>
+    <p class="sub">PDF, CSV or Excel. The system reads the transactions and matches them
+      to your salary months.</p>
+  </div>
+</div>
+
+{% if error %}{{ m.alert('danger', error) }}{% endif %}
+
+<div class="card">
+  <form method="post" action="/import" enctype="multipart/form-data" data-guard>
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="form-row">
+      <div class="field">
+        <label for="statement">Statement file <span class="req">*</span></label>
+        <input id="statement" type="file" name="statement" required
+               accept=".pdf,.csv,.xlsx,.xls,.txt">
+        <div class="hint">Maximum {{ max_mb }} MB. Your original file is stored unchanged
+          as evidence.</div>
+      </div>
+      {% if employees|length > 1 %}
+      <div class="field">
+        <label for="employee_id">Whose statement is this?</label>
+        <select id="employee_id" name="employee_id">
+          <option value="">Let the system suggest</option>
+          {% for e in employees %}<option value="{{ e.id }}">{{ e.full_name }} ({{ e.employee_code }})</option>{% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div class="field">
+        <label for="date_format">Date format in the file</label>
+        <select id="date_format" name="date_format">
+          <option value="dayfirst">Day first (31/01/2026) — usual in India</option>
+          <option value="monthfirst">Month first (01/31/2026)</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn" type="submit" data-busy="Reading the statement...">{{ t('btn.upload') }}</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>What happens after you upload</h2>
+  <ol class="small">
+    <li>The file format is detected and checked for safety.</li>
+    <li>Transactions are read out and put into one standard form.</li>
+    <li>Rows already imported before are skipped, so nothing is counted twice.</li>
+    <li>Each credit is classified using several signals, not just one word.</li>
+    <li>Each payment is matched to the salary month it belongs to.</li>
+    <li>Expected, sanctioned and received amounts are compared.</li>
+    <li>Anything uncertain is shown for you to confirm — never guessed silently.</li>
+  </ol>
+  <p class="small muted">Any row that cannot be read is listed for you afterwards.
+    Nothing is thrown away quietly.</p>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <h2 class="mb0">Recent uploads</h2>
+    <a class="btn secondary sm" href="/payments/manual">Record a payment by hand</a>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>When</th><th>File</th><th>Format</th><th class="num">Read</th>
+                 <th class="num">Imported</th><th class="num">Skipped</th><th class="num">Unreadable</th>
+                 <th>{{ t('field.status') }}</th><th></th></tr></thead>
+      <tbody>
+        {% for job in recent_imports %}
+        <tr>
+          <td class="tiny nowrap">{{ job.created_at|datetime }}</td>
+          <td class="small">{{ job.filename }}</td>
+          <td class="tiny">{{ job.detected_format or '—' }}</td>
+          <td class="num">{{ job.rows_total }}</td>
+          <td class="num">{{ job.rows_imported }}</td>
+          <td class="num">{{ job.rows_duplicate }}</td>
+          <td class="num">{{ job.rows_failed }}</td>
+          <td>{{ m.status_badge(job.status, 'ok' if job.status == 'COMPLETED' else ('danger' if job.status == 'FAILED' else 'warn')) }}</td>
+          <td><a class="btn sm ghost" href="/import/jobs/{{ job.uid }}">{{ t('btn.view') }}</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9">{{ m.empty_state('No statements have been uploaded yet.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

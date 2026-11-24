@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ t('nav.employees') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t('nav.employees') }}</h1>
+    <p class="sub">{{ employees|length }} record(s) you can access</p>
+  </div>
+</div>
+
+{% if error %}{{ m.alert('danger', error) }}{% endif %}
+
+<form method="get" class="filters">
+  <div class="field">
+    <label for="q">{{ t('common.search') }}</label>
+    <input id="q" type="search" name="q" value="{{ q or '' }}" placeholder="Name or employee ID">
+  </div>
+  <div class="field">
+    <label for="st">{{ t('field.status') }}</label>
+    <select id="st" name="status_filter" data-autosubmit>
+      <option value="">{{ t('common.all') }}</option>
+      {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if status_filter == s }}>{{ s.replace('_',' ')|title }}</option>{% endfor %}
+    </select>
+  </div>
+  <button class="btn sm" type="submit">{{ t('common.filter') }}</button>
+  <a class="btn sm ghost" href="/employees">Clear</a>
+</form>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Name</th><th>{{ t('field.employee_code') }}</th><th>{{ t('field.designation') }}</th>
+                 <th>{{ t('field.location') }}</th><th>Bank account</th>
+                 <th>{{ t('dashboard.payment_health') }}</th><th>{{ t('field.status') }}</th><th></th></tr></thead>
+      <tbody>
+        {% for e in employees %}
+        <tr>
+          <td><a href="/employees/{{ e.uid }}"><strong>{{ e.full_name }}</strong></a></td>
+          <td class="mono tiny">{{ e.employee_code }}</td>
+          <td class="small">{{ e.designation.name if e.designation else '—' }}</td>
+          <td class="small">{{ e.location.name if e.location else '—' }}</td>
+          <td class="mono tiny">{{ e.primary_account.masked if e.primary_account else '—' }}</td>
+          <td>
+            {% set h = health.get(e.id) %}
+            <span class="badge {{ 'ok' if h == 'GOOD' else ('warn' if h == 'ATTENTION' else ('danger' if h == 'ACTION_REQUIRED' else 'neutral')) }}">
+              <span class="sym" aria-hidden="true">{{ '✓' if h == 'GOOD' else ('⚠' if h == 'ATTENTION' else ('✕' if h == 'ACTION_REQUIRED' else '•')) }}</span>
+              {{ health_label(h, locale) }}
+            </span>
+          </td>
+          <td class="tiny">{{ e.status|title }}</td>
+          <td><a class="btn sm ghost" href="/?employee_uid={{ e.uid }}">Dashboard</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">{{ m.empty_state('No employees match these filters.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if is_admin and not is_read_only %}
+<div class="card">
+  <h2>Add an employee</h2>
+  <form method="post" action="/employees" data-guard>
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="form-row">
+      <div class="field">
+        <label for="employee_code">{{ t('field.employee_code') }} <span class="req">*</span></label>
+        <input id="employee_code" type="text" name="employee_code" required placeholder="AWW-LKO-0045">
+        <div class="hint">A stable code. The name is never used as an identifier.</div>
+      </div>
+      <div class="field">
+        <label for="full_name">Full name <span class="req">*</span></label>
+        <input id="full_name" type="text" name="full_name" required>
+      </div>
+      <div class="field">
+        <label for="designation_id">{{ t('field.designation') }}</label>
+        <select id="designation_id" name="designation_id">
+          <option value="">—</option>
+          {% for d in designations %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="department_id">{{ t('field.department') }}</label>
+        <select id="department_id" name="department_id">
+          <option value="">—</option>
+          {% for d in departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="scheme_id">{{ t('field.scheme') }}</label>
+        <select id="scheme_id" name="scheme_id">
+          <option value="">—</option>
+          {% for s in schemes %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="location_id">{{ t('field.location') }}</label>
+        <select id="location_id" name="location_id">
+          <option value="">—</option>
+          {% for l in locations %}<option value="{{ l.id }}">{{ l.path }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="joining_date">Joining date</label>
+        <input id="joining_date" type="date" name="joining_date">
+      </div>
+      <div class="field">
+        <label for="phone">Phone</label>
+        <input id="phone" type="text" name="phone" inputmode="tel">
+      </div>
+    </div>
+
+    <h3>Bank account {{ t('common.optional') }}</h3>
+    <div class="form-row">
+      <div class="field">
+        <label for="bank_name">{{ t('field.bank') }}</label>
+        <input id="bank_name" type="text" name="bank_name">
+      </div>
+      <div class="field">
+        <label for="account_number">Account number</label>
+        <input id="account_number" type="text" name="account_number" inputmode="numeric">
+        <div class="hint">Stored encrypted. Only the last four digits are ever displayed.</div>
+      </div>
+      <div class="field">
+        <label for="ifsc">IFSC</label>
+        <input id="ifsc" type="text" name="ifsc" placeholder="SBIN0001234">
+      </div>
+    </div>
+
+    <button class="btn" type="submit">{{ t('btn.save') }}</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

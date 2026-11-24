@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ t('nav.rules') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t('nav.rules') }}</h1>
+    <p class="sub">Salary amounts live here as data, never in the application code.
+      Every rule is versioned and must name its source.</p>
+  </div>
+</div>
+
+{% if error %}{{ m.alert('danger', error) }}{% endif %}
+
+{% if conflicts %}
+<div class="card">
+  <h2>Conflicting rules need a decision</h2>
+  {{ m.alert('warn', 'Two rules disagree for an overlapping scope and period. The system has NOT chosen between them. An administrator must resolve which is correct.') }}
+  <ul class="evidence-list">
+    {% for c in conflicts %}
+    <li>
+      <span><strong>{{ c.subject }}</strong><br>
+        <span class="small muted">{{ c.detail }}</span></span>
+      <span class="pill-row">
+        <span class="badge warn">A: {{ c.value_a }}</span>
+        <span class="badge warn">B: {{ c.value_b }}</span>
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Rules</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Code</th><th>Name</th><th>Applies to</th><th>Effective</th>
+                 <th class="num">Gross</th><th>Source</th><th>{{ t('field.status') }}</th><th></th></tr></thead>
+      <tbody>
+        {% for r in rules %}
+        <tr>
+          <td class="mono tiny">{{ r.rule_code }}<br>v{{ r.version }}</td>
+          <td class="small">{{ r.name }}</td>
+          <td class="tiny">
+            {% if r.scope_state %}{{ r.scope_state }}<br>{% endif %}
+            {% if r.scope_designation_id %}Designation-specific<br>{% endif %}
+            {% if r.scope_category %}{{ r.scope_category }}{% endif %}
+          </td>
+          <td class="tiny nowrap">{{ r.effective_from|date }}<br>
+            {{ r.effective_to|date if r.effective_to else 'ongoing' }}</td>
+          <td class="num">{{ (r.components | rejectattr('kind','equalto','DEDUCTION') | sum(attribute='amount_paise'))|money(currency) }}</td>
+          <td class="tiny">
+            {% if r.government_order %}<span class="badge ok"><span class="sym" aria-hidden="true">✓</span>Order</span>
+            {% elif r.source_note %}<span class="badge info"><span class="sym" aria-hidden="true">•</span>Note</span>
+            {% else %}<span class="badge danger"><span class="sym" aria-hidden="true">✕</span>None</span>{% endif %}
+          </td>
+          <td>{{ m.status_badge(r.status, 'ok' if r.status == 'ACTIVE' else ('neutral' if r.status == 'SUPERSEDED' else 'warn')) }}</td>
+          <td><a class="btn sm ghost" href="/rules/{{ r.uid }}">{{ t('btn.view') }}</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">{{ m.empty_state('No salary rules configured yet. Add one below.', '§') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if not is_read_only %}
+<div class="card">
+  <h2>Build a rule</h2>
+  <p class="small muted">No code required. Set who it applies to, when it takes effect, and
+    what it pays. New rules are saved as a DRAFT and change nothing until you simulate and
+    activate them.</p>
+
+  <form method="post" action="/rules" data-guard>
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+
+    <h3>Identity</h3>
+    <div class="form-row">
+      <div class="field">
+        <label for="rule_code">Rule code <span class="req">*</span></label>
+        <input id="rule_code" type="text" name="rule_code" required placeholder="UP-AWW-2026-001">
+      </div>
+      <div class="field">
+        <label for="name">Name <span class="req">*</span></label>
+        <input id="name" type="text" name="name" required placeholder="Anganwadi Worker honorarium">
+      </div>
+      <div class="field">
+        <label for="effective_from">Effective from <span class="req">*</span></label>
+        <input id="effective_from" type="date" name="effective_from" required>
+      </div>
+      <div class="field">
+        <label for="effective_to">Effective to</label>
+        <input id="effective_to" type="date" name="effective_to">
+        <div class="hint">Leave blank for ongoing.</div>
+      </div>
+    </div>
+
+    <h3>IF — who does this apply to?</h3>
+    <p class="tiny muted">Leave a field blank to mean "any value".</p>
+    <div class="form-row">
+      <div class="field">
+        <label for="scope_state">State</label>
+        <input id="scope_state" type="text" name="scope_state" value="{{ organization.state or '' }}">
+      </div>
+      <div class="field">
+        <label for="scope_designation_id">{{ t('field.designation') }}</label>
+        <select id="scope_designation_id" name="scope_designation_id">
+          <option value="">Any</option>
+          {% for d in designations %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="scope_department_id">{{ t('field.department') }}</label>
+        <select id="scope_department_id" name="scope_department_id">
+          <option value="">Any</option>
+          {% for d in departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="scope_scheme_id">{{ t('field.scheme') }}</label>
+        <select id="scope_scheme_id" name="scope_scheme_id">
+          <option value="">Any</option>
+          {% for s in schemes %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="scope_location_id">Area</label>
+        <select id="scope_location_id" name="scope_location_id">
+          <option value="">Any</option>
+          {% for l in locations %}<option value="{{ l.id }}">{{ l.path }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <h3>THEN — what is payable?</h3>
+    <div id="components">
+      {% for i in range(3) %}
+      <div class="form-row" data-repeat-row style="border-bottom:1px solid var(--line-soft);padding-bottom:.5rem;margin-bottom:.5rem">
+        <div class="field">
+          <label>Code</label>
+          <input type="text" name="component_code" placeholder="{{ ['CENTRAL_SHARE','STATE_SHARE','ALLOWANCE'][i] }}">
+        </div>
+        <div class="field">
+          <label>Label</label>
+          <input type="text" name="component_label" placeholder="{{ ['Central Government share','State Government share','Allowance'][i] }}">
+        </div>
+        <div class="field">
+          <label>Kind</label>
+          <select name="component_kind">
+            {% for k in component_kinds %}<option value="{{ k }}">{{ k|title }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>Funded by</label>
+          <select name="component_funding">
+            {% for f in funding_sources %}<option value="{{ f }}">{{ f|title }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>Amount per month</label>
+          <input type="text" name="component_amount" inputmode="decimal" placeholder="0.00">
+        </div>
+        <div class="field">
+          <label>Prorate?</label>
+          <label class="small"><input type="checkbox" name="component_prorated" value="{{ i }}"> Yes</label>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <button class="btn ghost sm" type="button" data-repeat-add="#components">+ Add another line</button>
+
+    <h3 class="mt2">How does a partial month work?</h3>
+    <div class="form-row">
+      <div class="field">
+        <label for="proration_policy">Proration</label>
+        <select id="proration_policy" name="proration_policy">
+          {% for p in proration_policies %}<option value="{{ p }}">{{ p.replace('_',' ')|title }}</option>{% endfor %}
+        </select>
+        <div class="hint">Not every rule prorates. The government order decides.</div>
+      </div>
+      <div class="field">
+        <label for="allow_mid_month_split">Mid-month rate change</label>
+        <label class="small"><input id="allow_mid_month_split" type="checkbox" name="allow_mid_month_split" value="1">
+          Allow the month to be split between two rates</label>
+      </div>
+    </div>
+
+    <h3>Source <span class="req">*</span></h3>
+    <p class="tiny muted">A rule with no source cannot be activated. Every amount must be traceable.</p>
+    <div class="form-row">
+      <div class="field">
+        <label for="government_order_id">Government order</label>
+        <select id="government_order_id" name="government_order_id">
+          <option value="">—</option>
+          {% for o in orders %}<option value="{{ o.id }}">{{ o.order_number or o.title }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="source_note">Or describe the source</label>
+        <input id="source_note" type="text" name="source_note"
+               placeholder="e.g. GO WCD/ICDS/2026/1147 dated 25 March 2026">
+      </div>
+    </div>
+
+    <button class="btn" type="submit">Save as draft</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

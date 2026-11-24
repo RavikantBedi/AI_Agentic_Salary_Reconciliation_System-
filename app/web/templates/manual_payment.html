@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Record a payment{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Record a payment by hand</h1>
+    <p class="sub">For cash payments, or a credit you can see but cannot upload a statement for.</p>
+  </div>
+</div>
+
+{{ m.alert('warn', 'A payment recorded by hand is marked CASH PAYMENT — DOCUMENT VERIFICATION REQUIRED and kept at verification Level 0. It is never given the same standing as an independently evidenced bank credit.') }}
+
+<div class="card">
+  <form method="post" action="/payments/manual" data-guard>
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="form-row">
+      <div class="field">
+        <label for="employee_id">{{ t('field.employee') }} <span class="req">*</span></label>
+        <select id="employee_id" name="employee_id" required>
+          {% for e in employees %}<option value="{{ e.id }}">{{ e.full_name }} ({{ e.employee_code }})</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="txn_date">{{ t('field.date') }} <span class="req">*</span></label>
+        <input id="txn_date" type="date" name="txn_date" value="{{ today }}" max="{{ today }}" required>
+      </div>
+      <div class="field">
+        <label for="amount">{{ t('money.amount') }} <span class="req">*</span></label>
+        <input id="amount" type="text" name="amount" inputmode="decimal" required placeholder="10000.00">
+      </div>
+      <div class="field">
+        <label for="payment_mode">How was it paid? <span class="req">*</span></label>
+        <select id="payment_mode" name="payment_mode">
+          <option value="CASH">Cash</option>
+          <option value="BANK">Bank transfer (no statement available)</option>
+          <option value="CHEQUE">Cheque</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label for="description">What is it for? <span class="req">*</span></label>
+      <input id="description" type="text" name="description" required
+             placeholder="e.g. March honorarium paid in cash at the block office">
+    </div>
+    <div class="field">
+      <label for="utr">Reference number {{ t('common.optional') }}</label>
+      <input id="utr" type="text" name="utr" placeholder="Receipt or voucher number">
+    </div>
+    <button class="btn" type="submit" data-busy="Recording...">{{ t('btn.save') }}</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>After recording it</h2>
+  <p class="small">Upload the receipt, voucher or distribution register page as evidence on the
+    transaction page. That raises the verification level and lets the payment be reconciled
+    with confidence.</p>
+</div>
+{% endblock %}

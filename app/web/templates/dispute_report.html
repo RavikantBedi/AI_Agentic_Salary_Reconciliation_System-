@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Statement — {{ dispute.title }}{% endblock %}
+{% block content %}
+<div class="page-head no-print">
+  <div>
+    <h1>Prepared statement</h1>
+    <p class="sub">{{ dispute.employee.full_name }} · reference <span class="mono">{{ dispute.uid[:10] }}</span></p>
+  </div>
+  <div class="btn-row">
+    <button class="btn" onclick="window.print()">Print</button>
+    <a class="btn secondary" href="/disputes/{{ dispute.uid }}">{{ t('btn.back') }}</a>
+  </div>
+</div>
+
+<div class="card">
+  <pre class="mono" style="white-space:pre-wrap;font-size:.82rem;line-height:1.6;margin:0">{{ report }}</pre>
+</div>
+
+<p class="small muted no-print">
+  This statement was prepared from the employee's own bank records and the documents held in
+  this system. It records a difference that the available evidence does not explain, and makes
+  no allegation of any kind.
+</p>
+{% endblock %}

@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ t('nav.dashboard') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t('nav.dashboard') }}</h1>
+    <p class="sub">{{ employee.full_name }} · {{ employee.employee_code }}
+      {% if employee.designation %}· {{ employee.designation.name }}{% endif %}</p>
+  </div>
+  {% if not is_read_only %}
+  <form method="post" action="/process" data-guard>
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="employee_id" value="{{ employee.id }}">
+    <button class="btn" type="submit" data-busy="Processing...">{{ t('dashboard.process_month') }}</button>
+  </form>
+  {% endif %}
+</div>
+
+{# ---- The single question a worker actually wants answered (spec s103) ---- #}
+<div class="card">
+  <div class="flex-between">
+    <h2 class="mb0">{{ t('dashboard.is_salary_correct') }}</h2>
+    <a class="btn secondary sm" href="/assistant">{{ t('nav.assistant') }}</a>
+  </div>
+  <div class="mt1">{{ m.health_card(health, locale) }}</div>
+
+  {% set problems = recons | selectattr('outcome', 'ne', 'FULLY_RECONCILED')
+                            | selectattr('outcome', 'ne', 'AWAITING_CONFIRMATION') | list %}
+  {% if problems %}
+    <p class="mt2 mb1"><strong>{{ problems|length }}</strong> month(s) need checking:</p>
+    <ul class="evidence-list">
+      {% for r in problems[:4] %}
+      <li>
+        <span><strong>{{ r.period.label if locale != 'hi' else r.period.label_hi }}</strong>
+          — {{ m.outcome_badge(r.outcome, locale) }}</span>
+        <span class="flex">
+          <span class="money-short num">{{ r.difference_paise|abs|money(currency) }}</span>
+          <a class="btn sm secondary" href="/periods/{{ r.uid }}">{{ t('btn.explain') }}</a>
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% if problems|length > 4 %}
+      <a href="/action-center" class="small">See all {{ problems|length }} items →</a>
+    {% endif %}
+  {% else %}
+    {{ m.alert('ok', 'Every month checked is fully reconciled. The amount you received matches the amount due.') }}
+  {% endif %}
+</div>
+
+{# ---------------------------- Top cards (spec s38) ---------------------------- #}
+<div class="grid grid-3 mb2">
+  {{ m.stat(t('dashboard.total_entitled'), totals.entitled_paise|money(currency), 'info',
+            totals.months_total ~ ' month(s) due so far') }}
+  {{ m.stat(t('dashboard.total_received'), totals.received_paise|money(currency), 'ok',
+            totals.months_reconciled ~ ' fully reconciled') }}
+  {{ m.stat(t('dashboard.total_pending'), totals.pending_paise|money(currency),
+            'danger' if totals.pending_paise > 0 else 'ok') }}
+  {{ m.stat(t('dashboard.total_deductions'), totals.deducted_paise|money(currency), 'warn',
+            (totals.unexplained_paise|money(currency)) ~ ' unexplained' if totals.unexplained_paise else 'All accounted for') }}
+  {{ m.stat(t('dashboard.total_arrears'), totals.arrears_paise|money(currency),
+            'warn' if totals.arrears_paise > 0 else 'ok') }}
+  {{ m.stat(t('dashboard.unverified'), totals.unverified_count,
+            'warn' if totals.unverified_count else 'ok',
+            'Not yet confirmed by an official document') }}
+</div>
+
+{# ------------------------------ Action summary ------------------------------ #}
+{% if monitor.critical or monitor.review %}
+<div class="card">
+  <div class="card-head">
+    <h2 class="mb0">{{ t('action.title') }}</h2>
+    <a class="btn secondary sm" href="/action-center">Open Action Center →</a>
+  </div>
+  <div class="pill-row mb2">
+    <span class="badge danger"><span class="sym" aria-hidden="true">🔴</span>{{ monitor.critical|length }} {{ t('action.critical') }}</span>
+    <span class="badge warn"><span class="sym" aria-hidden="true">🟡</span>{{ monitor.review|length }} {{ t('action.review') }}</span>
+    <span class="badge ok"><span class="sym" aria-hidden="true">🟢</span>{{ monitor.reconciled_count }} {{ t('action.reconciled') }}</span>
+  </div>
+  <ul class="evidence-list">
+    {% for item in (monitor.critical + monitor.review)[:5] %}
+    <li>
+      <span>{{ m.severity_badge(item.severity) }} {{ item.title(locale) }}</span>
+      {% if item.link %}<a class="btn sm ghost" href="{{ item.link }}">{{ t('btn.view') }}</a>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{# --------------------------- Chart (spec s87) --------------------------- #}
+{% if chart_data.labels %}
+<div class="card">
+  <h2>{{ t('money.expected') }} vs {{ t('money.received') }}</h2>
+  {{ m.bar_chart(chart_data.labels, chart_data.expected, chart_data.received,
+                 t('money.expected'), t('money.received'), currency) }}
+</div>
+{% endif %}
+
+{# --------------------------- Timeline (spec s39) --------------------------- #}
+<div class="card">
+  <div class="card-head">
+    <h2 class="mb0">{{ t('dashboard.timeline') }}</h2>
+    <a class="btn secondary sm" href="/my-salary">{{ t('nav.my_salary') }} →</a>
+  </div>
+  <div class="timeline">
+    {% for r in recons %}
+    <a class="tl-row" href="/periods/{{ r.uid }}">
+      <span class="month">{{ r.period.short_label if locale != 'hi' else r.period.label_hi }}</span>
+      <span class="flow">
+        {{ r.entitled_paise|money(currency) }}
+        <span class="arrow" aria-hidden="true">→</span>
+        {{ r.credited_paise|money(currency) }}
+        <span class="arrow" aria-hidden="true">→</span>
+        {{ m.money_cell(r.difference_paise, currency) }}
+      </span>
+      {{ m.outcome_badge(r.outcome, locale) }}
+    </a>
+    {% else %}
+      {{ m.empty_state(t('common.no_records')) }}
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Processing{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ job.job_type.replace('_',' ')|title }}</h1>
+    <p class="sub">Started {{ job.created_at|datetime }}</p>
+  </div>
+  {{ m.status_badge(job.status, 'ok' if job.status == 'COMPLETED' else ('danger' if job.status == 'FAILED' else 'warn')) }}
+</div>
+
+<div class="card" data-job-uid="{{ job.uid }}">
+  <div class="flex-between mb1">
+    <strong id="job-message">{{ job.message or 'Working...' }}</strong>
+    <span id="job-percent" class="num">{{ job.percent }}%</span>
+  </div>
+  <div class="progress" id="job-progress" role="progressbar"
+       aria-valuenow="{{ job.percent }}" aria-valuemin="0" aria-valuemax="100">
+    <div class="fill" style="width: {{ job.percent }}%"></div>
+  </div>
+  {% if job.total %}
+  <p class="small muted mt1">{{ job.progress }} of {{ job.total }}</p>
+  {% endif %}
+  <noscript><p class="small muted mt1">Reload this page to see the latest progress.</p></noscript>
+</div>
+
+{% if job.error %}
+  {{ m.alert('danger', job.error) }}
+{% endif %}
+
+{% set r = job.result_json or {} %}
+{% if r %}
+<div class="card">
+  <h2>Result</h2>
+  {% if r.message %}{{ m.alert('info', r.message) }}{% endif %}
+
+  {% if r.processed is defined %}
+  <div class="grid grid-4">
+    {{ m.stat('Records processed', r.processed) }}
+    {{ m.stat('Reconciled', r.reconciled or 0, 'ok') }}
+    {{ m.stat('Need review', r.review_required or 0, 'warn' if r.review_required else 'ok') }}
+    {{ m.stat('Short payments', r.short_payments or 0, 'danger' if r.short_payments else 'ok') }}
+  </div>
+  {% endif %}
+
+  {% if r.employees_affected is defined %}
+  <div class="grid grid-3">
+    {{ m.stat('Employees affected', r.employees_affected, 'info') }}
+    {{ m.stat('Months affected', r.periods_affected, 'info') }}
+    {{ m.stat('Total change', (r.total_delta_paise or 0)|money(currency),
+              'warn' if r.total_delta_paise else 'ok') }}
+  </div>
+  {{ m.alert('info', 'This is a simulation. Nothing has been changed. If the rule is later activated, differences for past months become adjustments and arrears — historical records are never rewritten.') }}
+  {% if r.impacts %}
+  <div class="table-wrap mt2">
+    <table class="data">
+      <thead><tr><th>{{ t('field.month') }}</th><th class="num">Old</th><th class="num">New</th><th class="num">Change</th></tr></thead>
+      <tbody>
+        {% for i in r.impacts %}
+        <tr><td>{{ i.period }}</td>
+            <td class="num">{{ i.old_paise|money(currency) }}</td>
+            <td class="num">{{ i.new_paise|money(currency) }}</td>
+            <td class="num">{{ m.money_cell(i.delta_paise, currency, true) }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  {% endif %}
+
+  {% if r.critical is defined %}
+  <div class="grid grid-3">
+    {{ m.stat('🔴 Critical', r.critical, 'danger' if r.critical else 'ok') }}
+    {{ m.stat('🟡 Review', r.review, 'warn' if r.review else 'ok') }}
+    {{ m.stat('🟢 Reconciled', r.reconciled, 'ok') }}
+  </div>
+  {% endif %}
+
+  {% if r.guidance %}{{ m.alert('warn', r.guidance) }}{% endif %}
+</div>
+{% endif %}
+
+<div class="btn-row">
+  <a class="btn" href="/">{{ t('nav.dashboard') }}</a>
+  <a class="btn secondary" href="/action-center">{{ t('nav.action_center') }}</a>
+  <a class="btn ghost" href="/jobs">All jobs</a>
+</div>
+{% endblock %}

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ t('nav.anomalies') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t('nav.anomalies') }}</h1>
+    <p class="sub">Differences and inconsistencies found in the records.</p>
+  </div>
+</div>
+
+{{ m.alert('info', 'These are findings that need checking. The system identifies discrepancies; it does not decide why they happened or who is responsible.') }}
+
+<form method="get" class="filters">
+  <div class="field">
+    <label for="sev">Severity</label>
+    <select id="sev" name="severity" data-autosubmit>
+      <option value="">{{ t('common.all') }}</option>
+      {% for s in Severity.values() %}<option value="{{ s }}" {{ 'selected' if severity == s }}>{{ s|title }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="st">{{ t('field.status') }}</label>
+    <select id="st" name="status_filter" data-autosubmit>
+      {% for s in AnomalyStatus.values() %}<option value="{{ s }}" {{ 'selected' if status_filter == s }}>{{ s|title }}</option>{% endfor %}
+    </select>
+  </div>
+  <noscript><button class="btn sm" type="submit">{{ t('common.filter') }}</button></noscript>
+</form>
+
+<div class="card">
+  {% if anomalies %}
+  <ul class="evidence-list">
+    {% for a in anomalies %}
+    <li style="align-items:flex-start">
+      <div style="flex:1;min-width:240px">
+        <div class="flex mb1">
+          {{ m.severity_badge(a.severity) }}
+          <strong>{{ a.title_hi if locale == 'hi' and a.title_hi else a.title_en }}</strong>
+        </div>
+        <div class="tiny muted">
+          {{ a.code.replace('_',' ')|title }}
+          {% if a.employee %}· {{ a.employee.full_name }}{% endif %}
+          {% if a.period %}· {{ a.period.label }}{% endif %}
+          {% if a.amount_paise %}· {{ a.amount_paise|money(currency) }}{% endif %}
+        </div>
+        {% set detail = a.detail_hi if locale == 'hi' and a.detail_hi else a.detail_en %}
+        {% if detail %}<div class="small muted mt1" style="white-space:pre-wrap">{{ detail[:400] }}</div>{% endif %}
+      </div>
+      {% if not is_read_only %}
+      <form method="post" action="/anomalies/{{ a.uid }}/status" class="flex">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <label class="tiny muted" for="ns-{{ a.id }}">Mark as</label>
+        <select id="ns-{{ a.id }}" name="new_status" style="min-width:130px">
+          {% for s in AnomalyStatus.values() %}<option value="{{ s }}" {{ 'selected' if a.status == s }}>{{ s|title }}</option>{% endfor %}
+        </select>
+        <input type="text" name="note" placeholder="Reason (optional)" style="min-width:150px">
+        <button class="btn sm secondary" type="submit">{{ t('btn.save') }}</button>
+      </form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+    {{ m.empty_state('No findings match these filters.', '✓') }}
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ rule.label }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ rule.label }}</h1>
+    <p class="sub">{{ rule.name }}</p>
+  </div>
+  <div class="btn-row">
+    {{ m.status_badge(rule.status, 'ok' if rule.status == 'ACTIVE' else ('neutral' if rule.status == 'SUPERSEDED' else 'warn')) }}
+  </div>
+</div>
+
+{% if what_if %}
+{{ m.alert('info', 'What-if scenario for ' ~ employee.full_name ~ '. Nothing has been changed — this is a preview only.') }}
+{% endif %}
+
+<div class="card">
+  <h2>What this rule pays</h2>
+  <div class="tree">
+    {% for c in rule.components %}
+    <div class="node {{ 'sub' if c.kind == 'DEDUCTION' else 'add' }}">
+      <span>
+        <strong>{{ c.label_en }}</strong>
+        <span class="why">{{ c.code }} · {{ c.kind|title }}
+          {% if c.funding_source %}· {{ c.funding_source|title }} share{% endif %}
+          {% if c.is_prorated %}· prorates for a partial month{% endif %}</span>
+        {% if c.source_note %}<span class="why">🗎 {{ c.source_note }}</span>{% endif %}
+      </span>
+      <span class="num nowrap">
+        {% if c.calc_method == 'PERCENT_OF' %}{{ c.percent_value }}% of {{ c.percent_of_code or 'gross' }}
+        {% else %}{{ '−' if c.kind == 'DEDUCTION' else '+' }} {{ c.amount_paise|money(currency) }}{% endif %}
+      </span>
+    </div>
+    {% endfor %}
+    <div class="node total">
+      <span>{{ t('money.gross') }}</span>
+      <span class="num">{{ gross_paise|money(currency) }}</span>
+    </div>
+    {% if deduction_paise %}
+    <div class="node sub"><span>{{ t('money.deduction') }}</span>
+      <span class="num">− {{ deduction_paise|money(currency) }}</span></div>
+    {% endif %}
+    <div class="node total">
+      <span>{{ t('money.net') }} per month</span>
+      <span class="num">{{ (gross_paise - deduction_paise)|money(currency) }}</span>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Scope and validity</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <tbody>
+        <tr><th style="width:220px">Effective from</th><td>{{ rule.effective_from|date }}</td></tr>
+        <tr><th>Effective to</th><td>{{ rule.effective_to|date if rule.effective_to else 'Ongoing' }}</td></tr>
+        <tr><th>State</th><td>{{ rule.scope_state or 'Any' }}</td></tr>
+        <tr><th>{{ t('field.designation') }}</th><td>{{ rule.scope_designation_id and 'Specific' or 'Any' }}</td></tr>
+        <tr><th>Worker category</th><td>{{ rule.scope_category or 'Any' }}</td></tr>
+        <tr><th>{{ t('field.department') }}</th><td>{{ rule.scope_department_id and 'Specific' or 'Any' }}</td></tr>
+        <tr><th>{{ t('field.scheme') }}</th><td>{{ rule.scope_scheme_id and 'Specific' or 'Any' }}</td></tr>
+        <tr><th>Partial month</th><td>{{ rule.proration_policy.replace('_',' ')|title }}</td></tr>
+        <tr><th>Mid-month rate change</th><td>{{ 'Month may be split' if rule.allow_mid_month_split else 'Month is not split' }}</td></tr>
+        <tr><th>Source</th>
+          <td>
+            {% if rule.government_order %}
+              <strong>{{ rule.government_order.order_number or rule.government_order.title }}</strong>
+              {% if rule.government_order.order_date %} dated {{ rule.government_order.order_date|date }}{% endif %}
+              {% if rule.government_order.issuing_authority %}<br><span class="small muted">{{ rule.government_order.issuing_authority }}</span>{% endif %}
+              {% if rule.government_order.document %}
+                <br><a href="/documents/{{ rule.government_order.document.uid }}">View the order</a>
+              {% endif %}
+            {% elif rule.source_note %}{{ rule.source_note }}
+            {% else %}<span class="badge danger"><span class="sym" aria-hidden="true">✕</span>No source — cannot be activated</span>{% endif %}
+          </td></tr>
+        {% if rule.superseded_by %}
+        <tr><th>Superseded by</th><td><a href="/rules/{{ rule.superseded_by.uid }}">{{ rule.superseded_by.label }}</a></td></tr>
+        {% endif %}
+        <tr><th>Approved</th>
+            <td>{{ rule.approved_at|datetime if rule.approved_at else 'Not yet approved' }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if what_if and result %}
+<div class="card">
+  <h2>What would change for {{ employee.full_name }}</h2>
+  {% if result.impacts %}
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>{{ t('field.month') }}</th><th class="num">Now</th><th class="num">Would be</th><th class="num">Change</th></tr></thead>
+      <tbody>
+        {% for i in result.impacts %}
+        <tr><td>{{ i.period.label }}</td>
+            <td class="num">{{ i.old_paise|money(currency) }}</td>
+            <td class="num">{{ i.new_paise|money(currency) }}</td>
+            <td class="num">{{ m.money_cell(i.delta_paise, currency, true) }}</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot><tr><td>{{ t('common.total') }}</td><td colspan="2"></td>
+        <td class="num">{{ result.total_delta_paise|money(currency) }}</td></tr></tfoot>
+    </table>
+  </div>
+  {% else %}
+    {{ m.empty_state('This rule would not change any month for this employee.') }}
+  {% endif %}
+</div>
+{% endif %}
+
+{% if not is_read_only and not what_if %}
+<div class="card">
+  <h2>Before you publish</h2>
+  <p class="small muted">Simulate first. It shows exactly which employees and months would
+    change, and how much would become arrears — without writing anything.</p>
+  <div class="btn-row">
+    <form method="post" action="/rules/{{ rule.uid }}/simulate" data-guard>
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn secondary" type="submit" data-busy="Simulating...">Simulate this rule</button>
+    </form>
+
+    {% if rule.status != 'ACTIVE' %}
+    <form method="post" action="/rules/{{ rule.uid }}/activate" class="flex">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="text" name="reason" placeholder="Reason for approval" style="min-width:200px">
+      <button class="btn" type="submit"
+              data-confirm="Activate {{ rule.label }}? Existing rules with the same scope will be superseded. Historical calculations will NOT be rewritten — any difference becomes an adjustment and an arrear.">
+        Approve and activate
+      </button>
+    </form>
+    {% endif %}
+  </div>
+  {% if not rule.has_source %}
+    {{ m.alert('danger', 'This rule cannot be activated until it names a source. Link a government order or describe where the amount comes from.') }}
+  {% endif %}
+</div>
+{% endif %}
+
+{% if audit_entries %}
+<div class="card">
+  <h2>{{ t('nav.audit') }}</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>When</th><th>Who</th><th>What</th><th>{{ t('field.reason') }}</th></tr></thead>
+      <tbody>
+        {% for e in audit_entries %}
+        <tr><td class="tiny nowrap">{{ e.created_at|datetime }}</td>
+            <td class="tiny">{{ e.actor_label }}</td>
+            <td class="tiny">{{ e.action.replace('_',' ')|title }}</td>
+            <td class="tiny">{{ e.reason or '—' }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

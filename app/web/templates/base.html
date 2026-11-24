@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="{{ locale }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <title>{% block title %}{{ t('app.name') }}{% endblock %} · {{ t('app.name') }}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>₹</text></svg>">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to main content</a>
+
+<div class="layout">
+  <header class="topbar">
+    <button class="icon-btn menu-btn" aria-label="Menu" aria-expanded="false" aria-controls="sidebar">☰</button>
+    <a class="brand" href="/">
+      <span aria-hidden="true">₹</span>
+      <span>{{ t('app.name') }}<small>{{ organization.name if organization else '' }}</small></span>
+    </a>
+    <span class="spacer"></span>
+
+    <div class="lang-toggle" role="group" aria-label="{{ t('common.language') }}">
+      <a href="/language/en" class="{{ 'active' if locale == 'en' }}" hreflang="en">EN</a>
+      <a href="/language/hi" class="{{ 'active' if locale == 'hi' }}" hreflang="hi">हिं</a>
+    </div>
+
+    {% if user %}
+      <a class="icon-btn" href="/notifications" aria-label="Notifications">
+        🔔{% if unread_notifications %}<span class="badge-count">{{ unread_notifications }}</span>{% endif %}
+      </a>
+      <form method="post" action="/logout" style="display:inline">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="icon-btn" type="submit">{{ t('nav.logout') }}</button>
+      </form>
+    {% endif %}
+  </header>
+
+  <div class="shell">
+    {% if user %}
+    <div class="backdrop"></div>
+    <aside class="sidebar" id="sidebar">
+      <nav aria-label="Main navigation">
+        {% set path = request.url.path %}
+        <a href="/" class="{{ 'active' if path == '/' }}"><span class="ico" aria-hidden="true">▤</span>{{ t('nav.dashboard') }}</a>
+        <a href="/action-center" class="{{ 'active' if path.startswith('/action-center') }}"><span class="ico" aria-hidden="true">◎</span>{{ t('nav.action_center') }}</a>
+
+        <div class="group-label">{{ t('nav.my_salary') }}</div>
+        <a href="/my-salary" class="{{ 'active' if path.startswith('/my-salary') or path.startswith('/periods') }}"><span class="ico" aria-hidden="true">₹</span>{{ t('nav.my_salary') }}</a>
+        <a href="/transactions" class="{{ 'active' if path.startswith('/transactions') }}"><span class="ico" aria-hidden="true">⇄</span>{{ t('nav.transactions') }}</a>
+        <a href="/arrears" class="{{ 'active' if path.startswith('/arrears') }}"><span class="ico" aria-hidden="true">⏳</span>{{ t('nav.arrears') }}</a>
+        <a href="/deductions" class="{{ 'active' if path.startswith('/deductions') }}"><span class="ico" aria-hidden="true">−</span>{{ t('nav.deductions') }}</a>
+        <a href="/benefits" class="{{ 'active' if path.startswith('/benefits') }}"><span class="ico" aria-hidden="true">▦</span>{{ t('nav.benefits') }}</a>
+
+        <div class="group-label">{{ t('field.evidence') }}</div>
+        <a href="/verification" class="{{ 'active' if path.startswith('/verification') }}"><span class="ico" aria-hidden="true">✓</span>{{ t('nav.verification') }}</a>
+        <a href="/documents" class="{{ 'active' if path.startswith('/documents') }}"><span class="ico" aria-hidden="true">🗎</span>{{ t('nav.documents') }}</a>
+        {% if not is_read_only %}
+        <a href="/import" class="{{ 'active' if path.startswith('/import') }}"><span class="ico" aria-hidden="true">↥</span>{{ t('nav.import') }}</a>
+        {% endif %}
+        <a href="/disputes" class="{{ 'active' if path.startswith('/disputes') }}"><span class="ico" aria-hidden="true">⚖</span>{{ t('nav.disputes') }}</a>
+        <a href="/reports" class="{{ 'active' if path.startswith('/reports') }}"><span class="ico" aria-hidden="true">📄</span>{{ t('nav.reports') }}</a>
+        <a href="/assistant" class="{{ 'active' if path.startswith('/assistant') }}"><span class="ico" aria-hidden="true">✦</span>{{ t('nav.assistant') }}</a>
+
+        {% if is_admin or user.role == 'AUDITOR' %}
+        <div class="group-label">{{ t('nav.admin') }}</div>
+        {% if is_admin %}<a href="/admin" class="{{ 'active' if path == '/admin' }}"><span class="ico" aria-hidden="true">◫</span>{{ t('nav.admin') }}</a>{% endif %}
+        <a href="/employees" class="{{ 'active' if path.startswith('/employees') }}"><span class="ico" aria-hidden="true">👥</span>{{ t('nav.employees') }}</a>
+        {% if is_admin %}<a href="/rules" class="{{ 'active' if path.startswith('/rules') }}"><span class="ico" aria-hidden="true">§</span>{{ t('nav.rules') }}</a>{% endif %}
+        <a href="/anomalies" class="{{ 'active' if path.startswith('/anomalies') }}"><span class="ico" aria-hidden="true">⚠</span>{{ t('nav.anomalies') }}</a>
+        <a href="/audit" class="{{ 'active' if path.startswith('/audit') }}"><span class="ico" aria-hidden="true">🕮</span>{{ t('nav.audit') }}</a>
+        {% if is_admin %}<a href="/data-quality" class="{{ 'active' if path.startswith('/data-quality') }}"><span class="ico" aria-hidden="true">◔</span>{{ t('nav.data_quality') }}</a>{% endif %}
+        {% endif %}
+
+        <div class="group-label">&nbsp;</div>
+        <a href="/settings" class="{{ 'active' if path.startswith('/settings') }}"><span class="ico" aria-hidden="true">⚙</span>{{ t('nav.settings') }}</a>
+      </nav>
+    </aside>
+    {% endif %}
+
+    <main class="main" id="main">
+      {% if is_read_only %}
+      <div class="alert info no-print">
+        <span class="sym" aria-hidden="true">ⓘ</span>
+        <span>You are signed in with read-only access. You can inspect every record and its
+              evidence, but cannot change financial data.</span>
+      </div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+
+<script src="/static/app.js" defer></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

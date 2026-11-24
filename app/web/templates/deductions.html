@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ t('nav.deductions') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t('nav.deductions') }}</h1>
+    <p class="sub">Every deduction, and whether an authority for it exists.</p>
+  </div>
+</div>
+
+{% if unexplained_total %}
+{{ m.alert('warn', 'A deduction is not assumed to be legitimate merely because the amount received was lower. ' ~ (unexplained_total|money(currency)) ~ ' currently has no supporting record.') }}
+{% endif %}
+
+<div class="grid grid-3 mb2">
+  {{ m.stat('Authorised by the rule', expected_total|money(currency), 'ok') }}
+  {{ m.stat('Supported by a document', documented_total|money(currency), 'ok') }}
+  {{ m.stat('No supporting record', unexplained_total|money(currency),
+            'danger' if unexplained_total else 'ok') }}
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          {% if not employee %}<th>{{ t('field.employee') }}</th>{% endif %}
+          <th>{{ t('field.month') }}</th><th>Category</th><th class="num">{{ t('money.amount') }}</th>
+          <th>{{ t('field.reason') }}</th><th>Authority</th>
+          <th>{{ t('field.evidence') }}</th><th>{{ t('field.status') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in deductions %}
+        <tr>
+          {% if not employee %}<td>{{ d.employee.full_name }}</td>{% endif %}
+          <td class="nowrap">{{ d.period.label if d.period else '—' }}</td>
+          <td>{{ d.category.replace('_',' ')|title }}</td>
+          <td class="num">{{ d.amount_paise|money(currency) }}</td>
+          <td class="small">{{ d.reason or '—' }}</td>
+          <td class="small">{{ d.authority or '—' }}</td>
+          <td>{% if d.evidence_document_id %}<span class="badge ok"><span class="sym" aria-hidden="true">✓</span>Attached</span>
+              {% else %}<span class="badge warn"><span class="sym" aria-hidden="true">⚠</span>None</span>{% endif %}</td>
+          <td>{{ m.status_badge(d.status, 'ok' if d.status in ['DOCUMENTED','EXPECTED'] else 'danger') }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">{{ m.empty_state('No deductions are recorded.', '✓') }}</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="{{ 3 if employee else 4 }}">{{ t('common.total') }}</td>
+          <td class="num">{{ deductions|sum(attribute='amount_paise')|money(currency) }}</td>
+          <td colspan="4"></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+{% endblock %}

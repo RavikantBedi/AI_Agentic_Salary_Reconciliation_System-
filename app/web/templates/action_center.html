@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ t('nav.action_center') }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t('action.title') }}</h1>
+    <p class="sub">
+      {% if employee %}{{ employee.full_name }} · {{ employee.employee_code }}
+      {% else %}{{ organization.name }}{% endif %}
+    </p>
+  </div>
+  {% if not is_read_only %}
+  <form method="post" action="/process" data-guard>
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    {% if employee %}<input type="hidden" name="employee_id" value="{{ employee.id }}">{% endif %}
+    <button class="btn secondary" type="submit" data-busy="Checking...">Re-check now</button>
+  </form>
+  {% endif %}
+</div>
+
+<div class="grid grid-3 mb2">
+  {{ m.stat('🔴 ' ~ t('action.critical'), monitor.critical|length,
+            'danger' if monitor.critical else 'ok') }}
+  {{ m.stat('🟡 ' ~ t('action.review'), monitor.review|length,
+            'warn' if monitor.review else 'ok') }}
+  {{ m.stat('🟢 ' ~ t('action.reconciled'), monitor.reconciled_count, 'ok') }}
+</div>
+
+{% if not monitor.critical and not monitor.review %}
+  <div class="card">{{ m.alert('ok', t('action.none')) }}</div>
+{% endif %}
+
+{% if monitor.critical %}
+<div class="card">
+  <h2><span aria-hidden="true">🔴</span> {{ monitor.critical|length }} {{ t('action.critical') }}</h2>
+  <ul class="evidence-list">
+    {% for item in monitor.critical %}
+    <li style="align-items:flex-start">
+      <div style="flex:1;min-width:220px">
+        <div class="flex mb1">
+          {{ m.severity_badge(item.severity) }}
+          <strong>{{ item.title(locale) }}</strong>
+        </div>
+        {% if item.detail(locale) %}
+        <div class="small muted" style="white-space:pre-wrap">{{ item.detail(locale)[:400] }}</div>
+        {% endif %}
+      </div>
+      <div class="flex">
+        {% if item.amount_paise %}<span class="money-short num">{{ item.amount_paise|money(currency) }}</span>{% endif %}
+        {% if item.link %}<a class="btn sm secondary" href="{{ item.link }}">{{ t('btn.view') }}</a>{% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if monitor.review %}
+<div class="card">
+  <h2><span aria-hidden="true">🟡</span> {{ monitor.review|length }} {{ t('action.review') }}</h2>
+  <ul class="evidence-list">
+    {% for item in monitor.review %}
+    <li style="align-items:flex-start">
+      <div style="flex:1;min-width:220px">
+        <div class="flex mb1">
+          {{ m.severity_badge(item.severity) }}
+          <strong>{{ item.title(locale) }}</strong>
+        </div>
+        {% if item.detail(locale) %}
+        <div class="small muted" style="white-space:pre-wrap">{{ item.detail(locale)[:300] }}</div>
+        {% endif %}
+      </div>
+      <div class="flex">
+        {% if item.amount_paise %}<span class="num">{{ item.amount_paise|money(currency) }}</span>{% endif %}
+        {% if item.link %}<a class="btn sm ghost" href="{{ item.link }}">{{ t('btn.view') }}</a>{% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{# ------------- What to upload to close the gaps (spec s35) ------------- #}
+{% if document_requests %}
+<div class="card">
+  <h2>{{ t('evidence.upload_prompt') }}</h2>
+  <p class="muted small">Any ONE document from each group below is enough.</p>
+  {{ m.document_requests(document_requests) }}
+  {% if not is_read_only %}
+  <a class="btn" href="/documents">{{ t('btn.upload') }}</a>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="card">
+  <h3>What this check looks at</h3>
+  <p class="muted small">Each time this runs, the system asks:</p>
+  <ul class="small muted">
+    {% for q in monitor.questions_checked %}<li>{{ q }}</li>{% endfor %}
+  </ul>
+</div>
+{% endblock %}

@@ -1,0 +1,332 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ period.label }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ period.label if locale != 'hi' else period.label_hi }}</h1>
+    <p class="sub">{{ employee.full_name }} · {{ employee.employee_code }}
+      {% if employee.designation %}· {{ employee.designation.name }}{% endif %}</p>
+  </div>
+  <div class="btn-row">
+    {{ m.outcome_badge(recon.outcome, locale) }}
+    {% if not is_read_only and recon.difference_paise != 0 %}
+    <a class="btn secondary" href="/disputes/new?recon_uid={{ recon.uid }}">{{ t('btn.raise_dispute') }}</a>
+    {% endif %}
+  </div>
+</div>
+
+{# ---------------- Plain-language explanation (spec s33) ---------------- #}
+<div class="card">
+  <h2>{{ t('btn.explain') }}</h2>
+  <div class="explain-box">{{ recon.explanation_hi if locale == 'hi' else recon.explanation_en }}</div>
+  {% set action = recon.recommended_action_hi if locale == 'hi' else recon.recommended_action_en %}
+  {% if action %}
+  <div class="alert info mt2">
+    <span class="sym" aria-hidden="true">→</span>
+    <span><strong>{{ t('field.action') }}:</strong> {{ action }}</span>
+  </div>
+  {% endif %}
+</div>
+
+{# ------------------- Four-way comparison (spec s29, s30) ------------------- #}
+<div class="card">
+  <h2>{{ t('money.expected') }} → {{ t('money.sanctioned') }} → {{ t('money.credited') }}</h2>
+  <div class="grid grid-4">
+    {{ m.stat(t('money.expected'), recon.entitled_paise|money(currency), 'info',
+              'From the applicable rule') }}
+    {{ m.stat(t('money.sanctioned'),
+              recon.sanctioned_paise|money(currency) if recon.sanctioned_paise is not none else t('common.unknown'),
+              'info' if recon.sanctioned_paise is not none else 'warn',
+              'Official record' if recon.sanctioned_paise is not none else 'No document supplied') }}
+    {{ m.stat(t('money.disbursed'),
+              recon.disbursed_paise|money(currency) if recon.disbursed_paise is not none else t('common.unknown'),
+              'info' if recon.disbursed_paise is not none else 'warn',
+              'Treasury / PFMS' if recon.disbursed_paise is not none else 'No record') }}
+    {{ m.stat(t('money.credited'), recon.credited_paise|money(currency),
+              'ok' if recon.difference_paise == 0 else 'danger', 'Bank records') }}
+  </div>
+
+  <div class="grid grid-3 mt2">
+    {{ m.stat(t('money.difference'), recon.difference_paise|money(currency),
+              'ok' if recon.difference_paise == 0 else ('danger' if recon.difference_paise > 0 else 'warn')) }}
+    {{ m.stat(t('money.deduction'), recon.deducted_paise|money(currency),
+              'warn' if recon.unexplained_deduction_paise else '',
+              (recon.unexplained_deduction_paise|money(currency)) ~ ' unexplained' if recon.unexplained_deduction_paise else '') }}
+    {{ m.stat(t('field.delay'),
+              (recon.delay_days ~ ' ' ~ t('field.days')) if recon.delay_days is not none else t('common.unknown'),
+              'warn' if recon.delay_days and recon.delay_days > 7 else 'ok',
+              ('Expected ' ~ (recon.expected_pay_date|date) ~ ', received ' ~ (recon.first_credit_date|date)) if recon.first_credit_date else 'No credit received') }}
+  </div>
+</div>
+
+{# ---------------- Explanation tree (spec s91) ---------------- #}
+{% if entitlement %}
+<div class="card">
+  <h2>Why is the expected amount {{ entitlement.net_paise|money(currency) }}?</h2>
+  <div class="tree">
+    {% for c in entitlement.components %}
+    <div class="node {{ 'sub' if c.kind == 'DEDUCTION' else 'add' }}">
+      <span>
+        <strong>{{ (c.label_hi or c.label_en) if locale == 'hi' else c.label_en }}</strong>
+        <span class="why">
+          {{ c.kind|title }}{% if c.funding_source %} · {{ c.funding_source|title }} share{% endif %}
+          {% if c.calculation_note %} · {{ c.calculation_note }}{% endif %}
+        </span>
+        {% if c.source_reference %}
+        <span class="why"><span aria-hidden="true">🗎</span> {{ c.source_reference }}</span>
+        {% endif %}
+      </span>
+      <span class="num nowrap">{{ '−' if c.kind == 'DEDUCTION' else '+' }} {{ c.amount_paise|money(currency) }}</span>
+    </div>
+    {% endfor %}
+
+    <div class="node total">
+      <span>{{ t('money.gross') }}</span>
+      <span class="num">{{ entitlement.gross_paise|money(currency) }}</span>
+    </div>
+    {% if entitlement.deductions_paise %}
+    <div class="node sub">
+      <span>{{ t('money.deduction') }}</span>
+      <span class="num">− {{ entitlement.deductions_paise|money(currency) }}</span>
+    </div>
+    {% endif %}
+    <div class="node total">
+      <span>{{ t('money.net') }} ({{ t('money.expected') }})</span>
+      <span class="num">{{ entitlement.net_paise|money(currency) }}</span>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="grid grid-4 small">
+    <div><span class="muted">Central share</span><br><strong class="num">{{ entitlement.central_paise|money(currency) }}</strong></div>
+    <div><span class="muted">State share</span><br><strong class="num">{{ entitlement.state_paise|money(currency) }}</strong></div>
+    <div><span class="muted">Employer share</span><br><strong class="num">{{ entitlement.employer_paise|money(currency) }}</strong></div>
+    <div><span class="muted">Other</span><br><strong class="num">{{ entitlement.other_paise|money(currency) }}</strong></div>
+  </div>
+
+  {% if entitlement.rule %}
+  <p class="small muted mt2">
+    <strong>Rule:</strong> {{ entitlement.rule.label }} — {{ entitlement.rule.name }}<br>
+    {% if entitlement.rule.government_order %}
+      <strong>Government order:</strong>
+      {% if entitlement.rule.government_order.document_id %}
+        <a href="/documents/{{ entitlement.rule.government_order.document.uid }}">{{ entitlement.rule.government_order.order_number or entitlement.rule.government_order.title }}</a>
+      {% else %}{{ entitlement.rule.government_order.order_number or entitlement.rule.government_order.title }}{% endif %}
+      {% if entitlement.rule.government_order.order_date %} dated {{ entitlement.rule.government_order.order_date|date }}{% endif %}
+    {% elif entitlement.rule.source_note %}
+      <strong>Source:</strong> {{ entitlement.rule.source_note }}
+    {% else %}
+      <span class="badge warn"><span class="sym" aria-hidden="true">⚠</span>No source document linked</span>
+    {% endif %}
+    {% if entitlement.proration_factor < 1 %}
+      <br><strong>Prorated:</strong> factor {{ entitlement.proration_factor }}
+    {% endif %}
+  </p>
+  {% endif %}
+
+  {% if superseded_entitlements %}
+  <details class="mt2">
+    <summary class="small">Earlier versions of this calculation ({{ superseded_entitlements|length }})</summary>
+    <div class="table-wrap mt1">
+      <table class="data">
+        <thead><tr><th>Computed</th><th class="num">Gross</th><th class="num">Net</th><th>Rule</th></tr></thead>
+        <tbody>
+          {% for e in superseded_entitlements %}
+          <tr><td>{{ e.computed_at|datetime }}</td>
+              <td class="num">{{ e.gross_paise|money(currency) }}</td>
+              <td class="num">{{ e.net_paise|money(currency) }}</td>
+              <td>{{ e.rule.label if e.rule else '—' }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="tiny muted mt1">Historical calculations are never deleted or edited. A recalculation
+      creates a new record and keeps the old one for audit.</p>
+  </details>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ---------------- Verification, kept per dimension (spec s28) ---------------- #}
+<div class="card">
+  <h2>{{ t('nav.verification') }}</h2>
+  <div class="grid grid-3">
+    <div>
+      <div class="label small muted">Money reached the account</div>
+      {{ m.verification_badge(recon.credit_verification_level, locale) }}
+    </div>
+    <div>
+      <div class="label small muted">Officially sanctioned</div>
+      {{ m.verification_badge(recon.sanction_verification_level, locale) }}
+    </div>
+    <div>
+      <div class="label small muted">Basis of the entitlement</div>
+      {{ m.verification_badge(recon.entitlement_verification_level, locale) }}
+    </div>
+  </div>
+  {{ m.alert('info', verification_gap) }}
+</div>
+
+{# ---------------- Evidence: the actual credits ---------------- #}
+<div class="card">
+  <h2>{{ t('field.evidence') }} — {{ t('money.received') }}</h2>
+  {% if allocations %}
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>{{ t('field.credit_date') }}</th><th class="num">{{ t('money.amount') }}</th>
+            <th>{{ t('field.utr') }}</th><th>Kind</th><th>Match</th><th>{{ t('field.status') }}</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for a in allocations %}
+        <tr>
+          <td class="nowrap">{{ a.transaction.txn_date|date if a.transaction else '—' }}</td>
+          <td class="num">{{ a.amount_paise|money(currency) }}</td>
+          <td class="mono">{{ a.transaction.utr if a.transaction and a.transaction.utr else '—' }}</td>
+          <td>{{ a.kind|title }}</td>
+          <td style="min-width:120px">{{ m.match_score(a.match_score) }}</td>
+          <td>{{ m.status_badge(a.status, 'ok' if a.status == 'CONFIRMED' else 'warn') }}</td>
+          <td>{% if a.transaction %}<a class="btn sm ghost" href="/transactions/{{ a.transaction.uid }}">{{ t('btn.view') }}</a>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr><td>{{ t('common.total') }}</td>
+            <td class="num">{{ allocations|sum(attribute='amount_paise')|money(currency) }}</td>
+            <td colspan="5"></td></tr>
+      </tfoot>
+    </table>
+  </div>
+  {% else %}
+    {{ m.empty_state('No credit has been matched to this month.', '∅') }}
+  {% endif %}
+</div>
+
+{# ---------------- Sanctions ---------------- #}
+{% if sanctions %}
+<div class="card">
+  <h2>{{ t('money.sanctioned') }}</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Sanction number</th><th>Date</th><th class="num">{{ t('money.amount') }}</th>
+                 <th>Authority</th><th>{{ t('field.verification_level') }}</th></tr></thead>
+      <tbody>
+        {% for s in sanctions %}
+        <tr>
+          <td class="mono">{{ s.sanction_number or '—' }}</td>
+          <td>{{ s.sanction_date|date }}</td>
+          <td class="num">{{ s.amount_paise|money(currency) }}</td>
+          <td>{{ s.authority or '—' }}</td>
+          <td>{{ m.verification_badge(s.verification_level, locale) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{# ---------------- Deductions ---------------- #}
+{% if deductions %}
+<div class="card">
+  <h2>{{ t('nav.deductions') }}</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Category</th><th class="num">{{ t('money.amount') }}</th><th>{{ t('field.reason') }}</th>
+                 <th>{{ t('field.status') }}</th><th>{{ t('field.evidence') }}</th></tr></thead>
+      <tbody>
+        {% for d in deductions %}
+        <tr>
+          <td>{{ d.category.replace('_',' ')|title }}</td>
+          <td class="num">{{ d.amount_paise|money(currency) }}</td>
+          <td class="small">{{ d.reason or '—' }}</td>
+          <td>{{ m.status_badge(d.status, 'ok' if d.status in ['DOCUMENTED','EXPECTED'] else 'danger') }}</td>
+          <td>{% if d.evidence_document_id %}<span class="badge ok"><span class="sym" aria-hidden="true">✓</span>Attached</span>
+              {% else %}<span class="badge warn"><span class="sym" aria-hidden="true">⚠</span>None</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{# ---------------- What would resolve this (spec s35) ---------------- #}
+{% if document_requests %}
+<div class="card">
+  <h2>{{ t('evidence.upload_prompt') }}</h2>
+  {{ m.document_requests(document_requests) }}
+  {% if not is_read_only %}
+  <form method="post" action="/documents/upload" enctype="multipart/form-data" data-guard>
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="entity_type" value="Reconciliation">
+    <input type="hidden" name="entity_id" value="{{ recon.id }}">
+    <input type="hidden" name="employee_id" value="{{ employee.id }}">
+    <div class="form-row">
+      <div class="field">
+        <label for="doc">Choose a file</label>
+        <input id="doc" type="file" name="document" required
+               accept=".pdf,.png,.jpg,.jpeg,.webp,.tif,.tiff,.csv,.xlsx,.xls">
+      </div>
+      <div class="field">
+        <label for="cat">What is it?</label>
+        <select id="cat" name="category">
+          <option value="PAYMENT_RECORD">Payment record</option>
+          <option value="SANCTION_ORDER">Sanction order</option>
+          <option value="SALARY_SLIP">Salary slip</option>
+          <option value="BANK_STATEMENT">Bank statement</option>
+          <option value="DEDUCTION_RECORD">Deduction record</option>
+          <option value="ATTENDANCE">Attendance record</option>
+          <option value="OTHER">Other</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn" type="submit" data-busy="Uploading...">{{ t('btn.upload') }}</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ---------------- Linked documents ---------------- #}
+{% if documents %}
+<div class="card">
+  <h2>{{ t('nav.documents') }}</h2>
+  <ul class="evidence-list">
+    {% for d in documents %}
+    <li>
+      <span><span aria-hidden="true">🗎</span> <a href="/documents/{{ d.uid }}">{{ d.title }}</a>
+        <span class="muted tiny">· {{ d.category.replace('_',' ')|title }} · v{{ d.version }}</span></span>
+      <a class="btn sm ghost" href="/documents/{{ d.uid }}/download">{{ t('btn.download') }}</a>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{# ---------------- Audit history (spec s51, s90) ---------------- #}
+<div class="card">
+  <h2>{{ t('nav.audit') }}</h2>
+  {% if audit_entries %}
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>When</th><th>Who</th><th>What</th><th>{{ t('field.reason') }}</th><th>Source</th></tr></thead>
+      <tbody>
+        {% for e in audit_entries %}
+        <tr>
+          <td class="nowrap tiny">{{ e.created_at|datetime }}</td>
+          <td class="tiny">{{ e.actor_label }}</td>
+          <td class="tiny">{{ e.action.replace('_',' ')|title }}</td>
+          <td class="tiny">{{ e.reason or '—' }}</td>
+          <td class="tiny"><span class="badge neutral">{{ e.source }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p class="muted small">No changes have been recorded for this month.</p>
+  {% endif %}
+</div>
+{% endblock %}

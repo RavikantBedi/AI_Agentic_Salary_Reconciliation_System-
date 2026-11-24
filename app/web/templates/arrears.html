@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ t('nav.arrears') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t('nav.arrears') }}</h1>
+    <p class="sub">Money owed for earlier months, and what has been settled since.</p>
+  </div>
+</div>
+
+<div class="grid grid-3 mb2">
+  {{ m.stat(t('money.outstanding'), total_outstanding|money(currency),
+            'danger' if total_outstanding else 'ok') }}
+  {{ m.stat('Settled so far', total_settled|money(currency), 'ok') }}
+  {{ m.stat('Open records',
+            arrears|selectattr('status','in',['OPEN','PARTIALLY_SETTLED'])|list|length,
+            'warn' if total_outstanding else 'ok') }}
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          {% if not employee %}<th>{{ t('field.employee') }}</th>{% endif %}
+          <th>Origin month</th>
+          <th class="num">Entitled</th>
+          <th class="num">Received then</th>
+          <th class="num">{{ t('money.outstanding') }}</th>
+          <th class="num">Settled</th>
+          <th class="num">Remaining</th>
+          <th>{{ t('field.reason') }}</th>
+          <th>{{ t('field.status') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in arrears %}
+        <tr>
+          {% if not employee %}<td>{{ a.employee.full_name }}</td>{% endif %}
+          <td class="nowrap"><strong>{{ a.origin_period.label if locale != 'hi' else a.origin_period.label_hi }}</strong></td>
+          <td class="num">{{ a.original_entitlement_paise|money(currency) }}</td>
+          <td class="num">{{ a.previously_received_paise|money(currency) }}</td>
+          <td class="num">{{ a.outstanding_paise|money(currency) }}</td>
+          <td class="num">{{ a.settled_paise|money(currency) }}</td>
+          <td class="num"><strong class="{{ 'money-short' if a.remaining_paise else 'money-ok' }}">{{ a.remaining_paise|money(currency) }}</strong></td>
+          <td class="small">{{ a.reason.replace('_',' ')|title }}</td>
+          <td>{{ m.status_badge(a.status, 'ok' if a.status == 'SETTLED' else 'warn') }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9">{{ m.empty_state('No arrears are recorded.', '✓') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% for a in arrears if a.settlements %}
+<div class="card">
+  <h3>Settlements for {{ a.origin_period.label }}{% if not employee %} — {{ a.employee.full_name }}{% endif %}</h3>
+  <ul class="evidence-list">
+    {% for s in a.settlements %}
+    <li><span>{{ s.settled_on|date }} — {{ s.note or 'Settled against a later payment' }}</span>
+        <strong class="num">{{ s.amount_paise|money(currency) }}</strong></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endfor %}
+{% endblock %}

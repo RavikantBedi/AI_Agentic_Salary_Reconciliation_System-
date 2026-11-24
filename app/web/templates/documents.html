@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ t('nav.documents') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t('nav.documents') }}</h1>
+    <p class="sub">Every document is kept exactly as uploaded. Replacing one creates a new
+      version — the original is never destroyed.</p>
+  </div>
+</div>
+
+{% if error %}{{ m.alert('danger', error) }}{% endif %}
+
+{% if not is_read_only %}
+<div class="card">
+  <h2>{{ t('btn.upload') }}</h2>
+  <form method="post" action="/documents/upload" enctype="multipart/form-data" data-guard>
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="form-row">
+      <div class="field">
+        <label for="document">File <span class="req">*</span></label>
+        <input id="document" type="file" name="document" required
+               accept=".pdf,.png,.jpg,.jpeg,.webp,.tif,.tiff,.csv,.xlsx,.xls">
+      </div>
+      <div class="field">
+        <label for="title">Title</label>
+        <input id="title" type="text" name="title" placeholder="Leave blank to use the file name">
+      </div>
+      <div class="field">
+        <label for="category">Category <span class="req">*</span></label>
+        <select id="category" name="category">
+          {% for c in categories %}<option value="{{ c }}">{{ c.replace('_',' ')|title }}</option>{% endfor %}
+        </select>
+      </div>
+      {% if employees|length > 1 %}
+      <div class="field">
+        <label for="employee_id">{{ t('field.employee') }}</label>
+        <select id="employee_id" name="employee_id">
+          <option value="">Not specific to one person</option>
+          {% for e in employees %}<option value="{{ e.id }}">{{ e.full_name }}</option>{% endfor %}
+        </select>
+      </div>
+      {% endif %}
+    </div>
+    <button class="btn" type="submit" data-busy="Uploading...">{{ t('btn.upload') }}</button>
+  </form>
+</div>
+{% endif %}
+
+<form method="get" class="filters">
+  <div class="field">
+    <label for="q">{{ t('common.search') }}</label>
+    <input id="q" type="search" name="q" value="{{ q or '' }}" placeholder="Title or reference number">
+  </div>
+  <div class="field">
+    <label for="cat">Category</label>
+    <select id="cat" name="category" data-autosubmit>
+      <option value="">{{ t('common.all') }}</option>
+      {% for c in categories %}
+      <option value="{{ c }}" {{ 'selected' if selected_category == c }}>
+        {{ c.replace('_',' ')|title }} ({{ category_counts.get(c, 0) }})
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+  <button class="btn sm" type="submit">{{ t('common.filter') }}</button>
+  <a class="btn sm ghost" href="/documents">Clear</a>
+</form>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Title</th><th>Category</th><th>{{ t('field.employee') }}</th>
+                 <th>Document date</th><th>Reference</th><th>Reading</th>
+                 <th>Version</th><th></th></tr></thead>
+      <tbody>
+        {% for d in documents %}
+        <tr>
+          <td><a href="/documents/{{ d.uid }}">{{ d.title }}</a>
+              <br><span class="tiny muted">{{ d.original_filename }} · {{ (d.size_bytes / 1024)|round|int }} KB</span></td>
+          <td class="small">{{ d.category.replace('_',' ')|title }}</td>
+          <td class="small">{{ d.employee.full_name if d.employee else '—' }}</td>
+          <td class="small nowrap">{{ d.document_date|date }}</td>
+          <td class="mono tiny">{{ d.reference_number or '—' }}</td>
+          <td>
+            {% if d.ocr_status == 'COMPLETED' %}<span class="badge ok"><span class="sym" aria-hidden="true">✓</span>Read</span>
+            {% elif d.ocr_status == 'UNAVAILABLE' %}<span class="badge warn"><span class="sym" aria-hidden="true">⚠</span>Not readable</span>
+            {% elif d.ocr_status == 'PARTIAL' %}<span class="badge warn"><span class="sym" aria-hidden="true">⚠</span>Partly read</span>
+            {% elif d.ocr_status == 'FAILED' %}<span class="badge danger"><span class="sym" aria-hidden="true">✕</span>Failed</span>
+            {% else %}<span class="badge neutral"><span class="sym" aria-hidden="true">•</span>{{ d.ocr_status|title }}</span>{% endif %}
+          </td>
+          <td class="tiny">v{{ d.version }}</td>
+          <td><a class="btn sm ghost" href="/documents/{{ d.uid }}/download">{{ t('btn.download') }}</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">{{ m.empty_state('No documents yet. Upload your first piece of evidence above.', '🗎') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

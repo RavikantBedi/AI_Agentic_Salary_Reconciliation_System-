@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ t('nav.benefits') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t('nav.benefits') }}</h1>
+    <p class="sub">Items received in kind — food grain, uniform, equipment and similar.</p>
+  </div>
+</div>
+
+{{ m.alert('info', 'Cash entitlement and in-kind benefits are kept as two separate ledgers. The estimated value shown below is indicative only; it is never treated as salary or added to your income.') }}
+
+<div class="grid grid-3 mb2">
+  {{ m.stat('Distributions recorded', distributions|length) }}
+  {{ m.stat('Short distributions', short_count, 'warn' if short_count else 'ok') }}
+  {{ m.stat('Estimated value', estimated_value_paise|money(currency), 'info', 'Indicative only') }}
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          {% if not employee %}<th>{{ t('field.employee') }}</th>{% endif %}
+          <th>{{ t('field.month') }}</th><th>Item</th>
+          <th class="num">Expected</th><th class="num">Received</th><th class="num">Shortage</th>
+          <th>{{ t('field.date') }}</th><th>{{ t('field.status') }}</th><th>{{ t('field.verification_level') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in distributions %}
+        <tr>
+          {% if not employee %}<td>{{ d.employee.full_name }}</td>{% endif %}
+          <td class="nowrap">{{ d.period.label if d.period else '—' }}</td>
+          <td>{% if d.item %}{{ (d.item.name_hi or d.item.name) if locale == 'hi' else d.item.name }}{% else %}—{% endif %}</td>
+          <td class="num">{{ '%g'|format(d.expected_quantity) }} {{ d.item.unit if d.item else '' }}</td>
+          <td class="num">{{ '%g'|format(d.received_quantity) }} {{ d.item.unit if d.item else '' }}</td>
+          <td class="num">{% if d.shortage_quantity %}<span class="money-short">{{ '%g'|format(d.shortage_quantity) }} {{ d.item.unit if d.item else '' }}</span>{% else %}—{% endif %}</td>
+          <td class="nowrap">{{ d.distribution_date|date }}</td>
+          <td>{{ m.status_badge(d.status, 'ok' if d.status == 'RECEIVED_FULL' else 'warn') }}</td>
+          <td>{{ m.verification_badge(d.verification_level, locale) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9">{{ m.empty_state('No benefit distributions are recorded.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if short_count %}
+{{ m.alert('warn', 'A shortage records a difference between the expected and the received quantity. Evidence such as the distribution register, a receipt or a photograph is required to resolve it. It is not an accusation against anyone.') }}
+{% endif %}
+{% endblock %}

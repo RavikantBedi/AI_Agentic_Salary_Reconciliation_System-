@@ -1,0 +1,177 @@
+{# Shared components.
+   Every status component pairs colour with a symbol AND a word, so the
+   meaning survives greyscale printing and colour blindness (spec s61). #}
+
+{% macro stat(label, value, tone='', foot='') %}
+<div class="stat {{ tone }}">
+  <div class="label">{{ label }}</div>
+  <div class="value">{{ value }}</div>
+  {% if foot %}<div class="foot">{{ foot }}</div>{% endif %}
+</div>
+{% endmacro %}
+
+
+{% macro outcome_badge(outcome, locale='en') %}
+{% set good = outcome == 'FULLY_RECONCILED' %}
+{% set neutral = outcome == 'AWAITING_CONFIRMATION' %}
+{% set bad = outcome in ['NOT_PAID', 'PAYMENT_REVERSED'] %}
+<span class="badge {{ 'ok' if good else ('neutral' if neutral else ('danger' if bad else 'warn')) }}">
+  <span class="sym" aria-hidden="true">{{ '✓' if good else ('•' if neutral else ('✕' if bad else '⚠')) }}</span>
+  {{ outcome_label(outcome, locale) }}
+</span>
+{% endmacro %}
+
+
+{% macro severity_badge(severity) %}
+<span class="badge {{ severity|severity_class }}">
+  <span class="sym" aria-hidden="true">{{ '⛔' if severity == 'CRITICAL' else ('⚠' if severity in ['HIGH','MEDIUM'] else 'ⓘ') }}</span>
+  {{ severity|title }}
+</span>
+{% endmacro %}
+
+
+{% macro status_badge(value, tone='neutral') %}
+<span class="badge {{ tone }}">
+  <span class="sym" aria-hidden="true">{{ value|status_symbol }}</span>
+  {{ value.replace('_', ' ')|title }}
+</span>
+{% endmacro %}
+
+
+{% macro verification_badge(level, locale='en') %}
+{% set tone = 'ok' if level >= 2 else ('info' if level == 1 else 'warn') %}
+<span class="badge {{ tone }}" title="{{ verification_label(level, locale) }}">
+  <span class="sym" aria-hidden="true">{{ '✓' if level >= 2 else ('•' if level == 1 else '⚠') }}</span>
+  L{{ level }} · {{ verification_label(level, locale).split(' - ')[1] if ' - ' in verification_label(level, locale) else verification_label(level, locale) }}
+</span>
+{% endmacro %}
+
+
+{% macro confidence_badge(confidence) %}
+{% set band = confidence|confidence_band %}
+{% set tone = 'ok' if band == 'HIGH' else ('info' if band == 'GOOD' else ('warn' if band == 'REVIEW' else 'danger')) %}
+<span class="badge {{ tone }}" title="Extraction/matching confidence only - not proof.">
+  <span class="sym" aria-hidden="true">{{ '✓' if band == 'HIGH' else '⚠' }}</span>
+  {{ (confidence * 100)|round|int }}%
+</span>
+{% endmacro %}
+
+
+{% macro money_cell(paise, currency='INR', invert=false) %}
+{% if paise is none %}
+  <span class="muted">—</span>
+{% elif paise > 0 %}
+  <span class="{{ 'money-excess' if invert else 'money-short' }}">{{ paise|money(currency) }}</span>
+{% elif paise < 0 %}
+  <span class="{{ 'money-short' if invert else 'money-excess' }}">{{ paise|money(currency) }}</span>
+{% else %}
+  <span class="money-ok">{{ 0|money(currency) }}</span>
+{% endif %}
+{% endmacro %}
+
+
+{% macro match_score(score) %}
+<div class="score">
+  <div class="bar"><div class="fill" style="width: {{ score }}%"></div></div>
+  <span class="val">{{ score }}/100</span>
+</div>
+{% endmacro %}
+
+
+{% macro empty_state(message, symbol='◌') %}
+<div class="empty">
+  <span class="big" aria-hidden="true">{{ symbol }}</span>
+  {{ message }}
+</div>
+{% endmacro %}
+
+
+{% macro alert(tone, message, symbol='') %}
+<div class="alert {{ tone }}">
+  <span class="sym" aria-hidden="true">{{ symbol or ('✓' if tone == 'ok' else ('⚠' if tone in ['warn','danger'] else 'ⓘ')) }}</span>
+  <span>{{ message }}</span>
+</div>
+{% endmacro %}
+
+
+{% macro health_card(health, locale='en') %}
+<div class="health {{ health }}">
+  <span class="dot" aria-hidden="true">{{ '🟢' if health == 'GOOD' else ('🟡' if health == 'ATTENTION' else ('🔴' if health == 'ACTION_REQUIRED' else '⚪')) }}</span>
+  <div class="txt">
+    <strong>{{ health_label(health, locale) }}</strong>
+    <span>
+      {% if health == 'GOOD' %}Every checked month matches your records.
+      {% elif health == 'ATTENTION' %}Some months need checking.
+      {% elif health == 'ACTION_REQUIRED' %}Something important needs your attention.
+      {% else %}Not enough information to judge yet.{% endif %}
+    </span>
+  </div>
+</div>
+{% endmacro %}
+
+
+{# A chart with an always-available tabular alternative (spec s87). #}
+{% macro bar_chart(labels, series_a, series_b, label_a, label_b, currency='INR') %}
+{% set maxv = ([1] + series_a + series_b)|max %}
+{% set n = labels|length %}
+{% if n > 0 %}
+<svg class="chart" viewBox="0 0 {{ 40 + n * 46 }} 150" role="img"
+     aria-label="{{ label_a }} compared with {{ label_b }} by month">
+  {% for i in range(5) %}
+    {% set y = 12 + i * 26 %}
+    <line class="grid-line" x1="34" y1="{{ y }}" x2="{{ 34 + n * 46 }}" y2="{{ y }}"></line>
+    <text class="axis-text" x="2" y="{{ y + 3 }}">{{ ((maxv * (4 - i) / 4) / 1000)|round(1) }}k</text>
+  {% endfor %}
+  {% for i in range(n) %}
+    {% set x = 40 + i * 46 %}
+    {% set ha = (series_a[i] / maxv * 104)|round %}
+    {% set hb = (series_b[i] / maxv * 104)|round %}
+    <rect class="bar-expected" x="{{ x }}" y="{{ 116 - ha }}" width="17" height="{{ ha }}" rx="2"></rect>
+    <rect class="bar-received" x="{{ x + 19 }}" y="{{ 116 - hb }}" width="17" height="{{ hb }}" rx="2"></rect>
+    <text class="axis-text" x="{{ x + 18 }}" y="130" text-anchor="middle">{{ labels[i][:3] }}</text>
+  {% endfor %}
+</svg>
+<div class="chart-legend">
+  <span><span class="key" style="background:#9fb6cf"></span>{{ label_a }}</span>
+  <span><span class="key" style="background:var(--brand)"></span>{{ label_b }}</span>
+</div>
+<details class="table-alt">
+  <summary>View this chart as a table</summary>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Month</th><th class="num">{{ label_a }}</th><th class="num">{{ label_b }}</th></tr></thead>
+      <tbody>
+      {% for i in range(n) %}
+        <tr><td>{{ labels[i] }}</td>
+            <td class="num">{{ (series_a[i] * 100)|int|money(currency) }}</td>
+            <td class="num">{{ (series_b[i] * 100)|int|money(currency) }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</details>
+{% endif %}
+{% endmacro %}
+
+
+{% macro document_requests(requests) %}
+{% for req in requests %}
+<div class="doc-request">
+  <strong>{{ req.reason }}</strong>
+  {% if req.options %}
+  <ol>{% for opt in req.options %}<li>{{ opt }}</li>{% endfor %}</ol>
+  {% endif %}
+</div>
+{% endfor %}
+{% endmacro %}
+
+
+{% macro pager(page, pages, base_url) %}
+{% if pages > 1 %}
+<nav class="pager" aria-label="Pagination">
+  {% if page > 1 %}<a href="{{ base_url }}page={{ page - 1 }}">← Previous</a>{% endif %}
+  <span class="current">{{ page }} / {{ pages }}</span>
+  {% if page < pages %}<a href="{{ base_url }}page={{ page + 1 }}">Next →</a>{% endif %}
+</nav>
+{% endif %}
+{% endmacro %}

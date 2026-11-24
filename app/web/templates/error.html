@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="card" style="max-width:640px;margin:2rem auto;text-align:center">
+  <div style="font-size:2.6rem" aria-hidden="true">
+    {% if code == 404 %}🔍{% elif code == 403 %}🔒{% elif code == 500 %}⚠{% else %}ⓘ{% endif %}
+  </div>
+  <h1>{{ title }}</h1>
+  <p class="muted">{{ message }}</p>
+  <div class="btn-row" style="justify-content:center">
+    <a class="btn" href="/">Go to dashboard</a>
+    <a class="btn secondary" href="javascript:history.back()">{{ t('btn.back') }}</a>
+  </div>
+</div>
+{% endblock %}

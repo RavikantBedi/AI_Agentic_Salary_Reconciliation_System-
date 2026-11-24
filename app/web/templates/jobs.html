@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Background jobs{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Background jobs</h1>
+    <p class="sub">Long work runs in the background so the screen never freezes.</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Started</th><th>Type</th><th>{{ t('field.status') }}</th>
+                 <th>Progress</th><th>Message</th><th></th></tr></thead>
+      <tbody>
+        {% for job in jobs %}
+        <tr>
+          <td class="tiny nowrap">{{ job.created_at|datetime }}</td>
+          <td class="small">{{ job.job_type.replace('_',' ')|title }}</td>
+          <td>{{ m.status_badge(job.status, 'ok' if job.status == 'COMPLETED' else ('danger' if job.status == 'FAILED' else 'warn')) }}</td>
+          <td style="min-width:120px">
+            <div class="progress"><div class="fill" style="width: {{ job.percent }}%"></div></div>
+            <span class="tiny muted">{{ job.percent }}%</span>
+          </td>
+          <td class="small">{{ job.message or '—' }}</td>
+          <td><a class="btn sm ghost" href="/jobs/{{ job.uid }}">{{ t('btn.view') }}</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">{{ m.empty_state('No jobs have run yet.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

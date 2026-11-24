@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Dispute {{ dispute.uid[:10] }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ dispute.title }}</h1>
+    <p class="sub">{{ dispute.employee.full_name }} · {{ dispute.employee.employee_code }}
+      {% if dispute.period %}· {{ dispute.period.label }}{% endif %}
+      · reference <span class="mono">{{ dispute.uid[:10] }}</span></p>
+  </div>
+  <div class="btn-row">
+    {{ m.status_badge(dispute.status, 'ok' if dispute.status in ['RESOLVED','CLOSED'] else 'warn') }}
+    <a class="btn secondary" href="/disputes/{{ dispute.uid }}/report">View statement</a>
+  </div>
+</div>
+
+<div class="grid grid-3 mb2">
+  {{ m.stat(t('money.expected'), dispute.expected_paise|money(currency), 'info') }}
+  {{ m.stat(t('money.received'), dispute.received_paise|money(currency), 'ok') }}
+  {{ m.stat(t('money.difference'), dispute.difference_paise|money(currency),
+            'danger' if dispute.difference_paise and dispute.difference_paise > 0 else 'info') }}
+</div>
+
+<div class="card">
+  <h2>Details</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <tbody>
+        <tr><th style="width:180px">Issue</th><td>{{ dispute.issue_type.replace('_',' ')|title }}</td></tr>
+        <tr><th>Office</th><td>{{ dispute.authority or 'Not recorded' }}</td></tr>
+        <tr><th>Raised on</th><td>{{ dispute.created_at|datetime }}</td></tr>
+        <tr><th>Submitted on</th><td>{{ dispute.submitted_at|datetime if dispute.submitted_at else 'Not yet submitted' }}</td></tr>
+        {% if dispute.resolved_at %}<tr><th>Closed on</th><td>{{ dispute.resolved_at|datetime }}</td></tr>{% endif %}
+      </tbody>
+    </table>
+  </div>
+  {% if dispute.description %}
+  <h3 class="mt2">In the employee's words</h3>
+  <div class="explain-box">{{ dispute.description }}</div>
+  {% endif %}
+  {% if dispute.response %}
+  <h3 class="mt2">Response received</h3>
+  <div class="explain-box">{{ dispute.response }}</div>
+  {% endif %}
+  {% if dispute.resolution %}
+  <h3 class="mt2">Resolution</h3>
+  <div class="explain-box">{{ dispute.resolution }}</div>
+  {% endif %}
+</div>
+
+{% if not is_read_only %}
+<div class="card">
+  <h2>Update progress</h2>
+  <form method="post" action="/disputes/{{ dispute.uid }}/status">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="form-row">
+      <div class="field">
+        <label for="new_status">{{ t('field.status') }}</label>
+        <select id="new_status" name="new_status">
+          {% for s in statuses %}
+          <option value="{{ s }}" {{ 'selected' if dispute.status == s }}
+            {{ 'disabled' if s in ['RESOLVED','CLOSED','REJECTED'] and not can_close }}>
+            {{ s.replace('_',' ')|title }}
+          </option>
+          {% endfor %}
+        </select>
+        {% if not can_close %}
+        <div class="hint">Only an administrator can resolve, reject or close a dispute.</div>
+        {% endif %}
+      </div>
+      <div class="field">
+        <label for="note">Note</label>
+        <input id="note" type="text" name="note" placeholder="What changed?">
+      </div>
+    </div>
+    <div class="field">
+      <label for="response_text">Response from the office</label>
+      <textarea id="response_text" name="response_text" data-draft="dispute-response">{{ dispute.response or '' }}</textarea>
+    </div>
+    <button class="btn" type="submit">{{ t('btn.save') }}</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Progress history</h2>
+  <ul class="evidence-list">
+    {% for e in events %}
+    <li>
+      <span><strong>{{ e.event.replace('_',' ')|title }}</strong>
+        {% if e.from_status %} — {{ e.from_status|title }} → {{ e.to_status|title }}{% endif %}
+        {% if e.note %}<br><span class="small muted">{{ e.note }}</span>{% endif %}</span>
+      <span class="tiny muted nowrap">{{ e.created_at|datetime }}</span>
+    </li>
+    {% else %}
+    <li class="muted">No progress recorded yet.</li>
+    {% endfor %}
+  </ul>
+</div>
+
+{% if not is_read_only %}
+<div class="card">
+  <h2>Attach evidence</h2>
+  <form method="post" action="/documents/upload" enctype="multipart/form-data" data-guard>
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="entity_type" value="Dispute">
+    <input type="hidden" name="entity_id" value="{{ dispute.id }}">
+    <input type="hidden" name="employee_id" value="{{ dispute.employee_id }}">
+    <div class="form-row">
+      <div class="field">
+        <label for="ddoc">File</label>
+        <input id="ddoc" type="file" name="document" required>
+      </div>
+      <div class="field">
+        <label for="dcat">What is it?</label>
+        <select id="dcat" name="category">
+          <option value="PAYMENT_RECORD">Payment record</option>
+          <option value="SANCTION_ORDER">Sanction order</option>
+          <option value="RECEIPT">Receipt or acknowledgement</option>
+          <option value="OTHER">Other</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn secondary" type="submit">{{ t('btn.upload') }}</button>
+  </form>
+
+  {% if documents %}
+  <ul class="evidence-list mt2">
+    {% for d in documents %}
+    <li><a href="/documents/{{ d.uid }}">{{ d.title }}</a>
+        <span class="tiny muted">{{ d.category.replace('_',' ')|title }}</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

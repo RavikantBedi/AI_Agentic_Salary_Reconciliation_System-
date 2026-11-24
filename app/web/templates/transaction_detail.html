@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Transaction {{ txn.uid }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ txn.amount_paise|money(currency) }}
+      <span class="badge {{ 'ok' if txn.direction == 'CREDIT' else 'neutral' }}">{{ txn.direction|title }}</span>
+    </h1>
+    <p class="sub">{{ txn.txn_date|date }} · {{ txn.employee.full_name if txn.employee else 'Not linked to an employee' }}</p>
+  </div>
+  <div class="btn-row">
+    {{ m.status_badge(txn.status, 'ok' if txn.status in ['RECONCILED','MATCHED'] else 'warn') }}
+    {% if not is_read_only %}
+    <form method="post" action="/transactions/{{ txn.uid }}/reprocess" data-guard>
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn secondary sm" type="submit" data-busy="Working...">Re-run checks</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if txn.is_reversed %}
+{{ m.alert('danger', 'This credit was later reversed. It is not counted as money received.') }}
+{% endif %}
+{% if txn.is_cash %}
+{{ m.alert('warn', 'CASH PAYMENT — DOCUMENT VERIFICATION REQUIRED. A cash entry recorded by hand is never given the same standing as an independently evidenced bank credit.') }}
+{% elif txn.is_manual_entry %}
+{{ m.alert('warn', 'This entry was recorded by hand and has not been independently verified.') }}
+{% endif %}
+
+{# ---------------------- Facts (spec s40) ---------------------- #}
+<div class="card">
+  <h2>Transaction details</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <tbody>
+        <tr><th style="width:200px">Transaction ID</th><td class="mono">{{ txn.uid }}</td></tr>
+        <tr><th>{{ t('field.bank') }}</th><td>{{ txn.bank_name or t('common.unknown') }}</td></tr>
+        <tr><th>Bank account</th><td class="mono">{{ account_display or t('common.unknown') }}</td></tr>
+        <tr><th>{{ t('field.date') }}</th><td>{{ txn.txn_date|date }}</td></tr>
+        <tr><th>{{ t('field.value_date') }}</th><td>{{ txn.value_date|date }}</td></tr>
+        <tr><th>{{ t('money.amount') }}</th><td class="num"><strong>{{ txn.amount_paise|money(currency) }}</strong></td></tr>
+        <tr><th>{{ t('money.balance') }}</th><td class="num">{{ txn.balance_paise|money(currency) }}</td></tr>
+        <tr><th>{{ t('field.narration') }}</th><td>{{ txn.description or '—' }}</td></tr>
+        <tr><th>{{ t('field.utr') }}</th><td class="mono">{{ txn.utr or '—' }}</td></tr>
+        <tr><th>Sender</th><td>{{ txn.counterparty or '—' }}</td></tr>
+        <tr><th>Source</th><td>
+          {% if txn.import_job_id %}<a href="/import/jobs/{{ txn.import_job_id }}">Uploaded statement</a>
+          {% elif txn.is_manual_entry %}Manual entry{% else %}—{% endif %}
+        </td></tr>
+        <tr><th>{{ t('field.verification_level') }}</th><td>{{ m.verification_badge(txn.verification_level, locale) }}</td></tr>
+        <tr><th>{{ t('field.classification') }}</th>
+            <td>{{ txn.classification.replace('_',' ')|title }}
+                {{ m.confidence_badge(txn.classification_confidence) }}
+                {% if txn.classification_locked %}<span class="badge info"><span class="sym" aria-hidden="true">🔒</span>Set by a person</span>{% endif %}</td></tr>
+        <tr><th>Allocated / unallocated</th>
+            <td class="num">{{ txn.allocated_paise|money(currency) }} / <strong>{{ remaining_paise|money(currency) }}</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ---------------- Why it was classified this way (spec s93) ---------------- #}
+{% set ev = txn.classification_evidence_json or {} %}
+{% if ev.signals %}
+<div class="card">
+  <h2>Why it was classified as "{{ txn.classification.replace('_',' ')|title }}"</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Signal</th><th>What was found</th><th class="num">Weight</th><th>Suggests</th></tr></thead>
+      <tbody>
+        {% for s in ev.signals %}
+        <tr><td>{{ s.name.replace('_',' ')|title }}</td><td class="small">{{ s.detail }}</td>
+            <td class="num">{{ s.weight }}</td><td>{{ s.suggests.replace('_',' ')|title }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if ev.alternatives %}
+  <p class="small muted mt1">Other possibilities considered:
+    {% for alt in ev.alternatives %}{{ alt.classification.replace('_',' ')|title }} ({{ alt.score }}){% if not loop.last %}, {% endif %}{% endfor %}
+  </p>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ---------------- Which salary month (spec s8, s9) ---------------- #}
+<div class="card">
+  <h2>{{ t('field.month') }}</h2>
+  {% if candidates %}
+  <p class="muted small">A payment date is not the same as the salary month. These are the
+    possible months, with the reasons behind each.</p>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>{{ t('field.month') }}</th><th class="num">Likelihood</th><th>Why</th><th></th></tr></thead>
+      <tbody>
+        {% for c in candidates %}
+        <tr>
+          <td class="nowrap"><strong>{{ c.period.label }}</strong>
+            {% if c.confirmed_by_human %}<span class="badge ok"><span class="sym" aria-hidden="true">✓</span>Confirmed</span>
+            {% elif c.is_selected %}<span class="badge info"><span class="sym" aria-hidden="true">•</span>Selected</span>{% endif %}
+          </td>
+          <td class="num">{{ (c.probability * 100)|round|int }}%</td>
+          <td class="small">
+            <ul style="margin:0;padding-left:1.1rem">
+              {% for r in c.reasons_json %}<li>{{ r }}</li>{% endfor %}
+            </ul>
+          </td>
+          <td>
+            {% if not is_read_only %}
+            <form method="post" action="/transactions/{{ txn.uid }}/assign-month">
+              <input type="hidden" name="csrf" value="{{ csrf }}">
+              <input type="hidden" name="period_id" value="{{ c.period.id }}">
+              <button class="btn sm secondary" type="submit"
+                      data-confirm="Assign this payment to {{ c.period.label }}?">Assign</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <p class="muted">Nothing in this transaction indicates which salary month it belongs to.</p>
+  {% endif %}
+
+  {% if not is_read_only and remaining_paise > 0 and txn.employee_id %}
+  <div class="divider"></div>
+  <h3>{{ t('btn.assign_month') }}</h3>
+  <form method="post" action="/transactions/{{ txn.uid }}/assign-month">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="form-row">
+      <div class="field">
+        <label for="pid">{{ t('field.month') }} <span class="req">*</span></label>
+        <select id="pid" name="period_id" required>
+          {% for p in periods %}<option value="{{ p.id }}">{{ p.label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="amt">{{ t('money.amount') }}</label>
+        <input id="amt" type="text" name="amount" inputmode="decimal"
+               placeholder="{{ (remaining_paise / 100)|round(2) }}">
+        <div class="hint">Leave blank to assign the full unallocated amount
+          ({{ remaining_paise|money(currency) }}).</div>
+      </div>
+      <div class="field">
+        <label for="kind">Kind</label>
+        <select id="kind" name="kind">
+          <option value="SALARY">Salary</option>
+          <option value="HONORARIUM">Honorarium</option>
+          <option value="ARREAR">Arrear</option>
+          <option value="INCENTIVE">Incentive</option>
+          <option value="ALLOWANCE">Allowance</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label for="reason">{{ t('field.reason') }}</label>
+      <input id="reason" type="text" name="reason" placeholder="Why does this belong to that month?">
+    </div>
+    <button class="btn" type="submit">{{ t('btn.confirm') }}</button>
+  </form>
+  {% endif %}
+</div>
+
+{# ---------------- Allocations (spec s57, s69) ---------------- #}
+<div class="card">
+  <h2>How this money has been counted</h2>
+  {% if allocations %}
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>{{ t('field.month') }}</th><th class="num">{{ t('money.amount') }}</th><th>Kind</th>
+                 <th>Match score</th><th>{{ t('field.status') }}</th><th>How</th><th></th></tr></thead>
+      <tbody>
+        {% for a in allocations %}
+        <tr class="{{ 'muted' if a.status == 'REJECTED' }}">
+          <td>{{ a.period.label if a.period else '—' }}</td>
+          <td class="num">{{ a.amount_paise|money(currency) }}</td>
+          <td>{{ a.kind|title }}</td>
+          <td style="min-width:130px">{{ m.match_score(a.match_score) }}</td>
+          <td>{{ m.status_badge(a.status, 'ok' if a.status == 'CONFIRMED' else ('neutral' if a.status == 'REJECTED' else 'warn')) }}</td>
+          <td class="tiny">{{ a.method|title }}</td>
+          <td>
+            {% if not is_read_only and a.status == 'SUGGESTED' %}
+            <div class="flex">
+              <form method="post" action="/transactions/{{ txn.uid }}/allocations/{{ a.id }}/confirm">
+                <input type="hidden" name="csrf" value="{{ csrf }}">
+                <button class="btn sm ok" type="submit">{{ t('btn.approve') }}</button>
+              </form>
+              <form method="post" action="/transactions/{{ txn.uid }}/allocations/{{ a.id }}/reject">
+                <input type="hidden" name="csrf" value="{{ csrf }}">
+                <button class="btn sm ghost" type="submit">{{ t('btn.reject') }}</button>
+              </form>
+            </div>
+            {% endif %}
+          </td>
+        </tr>
+        {% if a.match_breakdown_json %}
+        <tr><td colspan="7" class="tiny muted" style="background:var(--line-soft)">
+          {% for line in a.match_breakdown_json %}
+            <strong>+{{ line.points }}</strong> {{ line.detail }}{% if not loop.last %} · {% endif %}
+          {% endfor %}
+        </td></tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr><td>Allocated</td>
+            <td class="num">{{ txn.allocated_paise|money(currency) }}</td>
+            <td colspan="5">of {{ txn.amount_paise|money(currency) }}
+              {% if remaining_paise > 0 %}
+              — <strong>{{ remaining_paise|money(currency) }} {{ t('money.unallocated') }}</strong>
+              {% endif %}
+            </td></tr>
+      </tfoot>
+    </table>
+  </div>
+  {% if remaining_paise > 0 %}
+    {{ m.alert('warn', (remaining_paise|money(currency)) ~ ' has deliberately not been assigned to any salary month, because the evidence does not identify one. It is shown here rather than being absorbed silently.') }}
+  {% endif %}
+  {% else %}
+    {{ m.empty_state('This money has not been assigned to any salary month yet.', '∅') }}
+  {% endif %}
+</div>
+
+{# ---------------- Possible duplicates (spec s14) ---------------- #}
+{% if duplicates %}
+<div class="card">
+  <h2>Possible duplicate payments</h2>
+  {{ m.alert('warn', 'Nothing has been removed. Two payments can legitimately look identical, so a person must decide.') }}
+  <ul class="evidence-list">
+    {% for d in duplicates %}
+    <li>
+      <span>
+        <a href="/transactions/{{ d.other.uid }}">{{ d.other.txn_date|date }} — {{ d.other.amount_paise|money(currency) }}</a>
+        <span class="tiny muted"><br>{{ d.reasons|join('; ') }}</span>
+      </span>
+      <span class="badge warn">{{ (d.strength * 100)|round|int }}% similar</span>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{# ---------------- Corrections (spec s44) ---------------- #}
+{% if not is_read_only %}
+<div class="card">
+  <h2>{{ t('btn.correct') }}</h2>
+  <div class="grid grid-2">
+    <div>
+      <h3>{{ t('field.classification') }}</h3>
+      <form method="post" action="/transactions/{{ txn.uid }}/classify">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="field">
+          <label for="cls">What is this payment for?</label>
+          <select id="cls" name="classification">
+            {% for c in classifications %}<option value="{{ c }}" {{ 'selected' if txn.classification == c }}>{{ c.replace('_',' ')|title }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="creason">{{ t('field.reason') }}</label>
+          <input id="creason" type="text" name="reason" placeholder="How do you know?">
+        </div>
+        <button class="btn secondary" type="submit">{{ t('btn.save') }}</button>
+      </form>
+    </div>
+
+    <div>
+      <h3>{{ t('field.employee') }}</h3>
+      <form method="post" action="/transactions/{{ txn.uid }}/link-employee">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="field">
+          <label for="eid">Whose payment is this?</label>
+          <select id="eid" name="employee_id" required>
+            {% for e in employees %}<option value="{{ e.id }}" {{ 'selected' if txn.employee_id == e.id }}>{{ e.full_name }} ({{ e.employee_code }})</option>{% endfor %}
+          </select>
+        </div>
+        <button class="btn secondary" type="submit">{{ t('btn.save') }}</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+  <h3>Add an explanation</h3>
+  <form method="post" action="/transactions/{{ txn.uid }}/note">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field">
+      <textarea name="note" data-draft="txn-note" placeholder="Anything you know about this payment..." required></textarea>
+    </div>
+    <button class="btn secondary" type="submit">{{ t('btn.save') }}</button>
+  </form>
+  {% if txn.notes %}
+  <div class="explain-box mt2">{{ txn.notes }}</div>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ---------------- Audit history ---------------- #}
+<div class="card">
+  <h2>{{ t('nav.audit') }}</h2>
+  {% if audit_entries %}
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>When</th><th>Who</th><th>What</th><th>{{ t('field.reason') }}</th><th>Source</th></tr></thead>
+      <tbody>
+        {% for e in audit_entries %}
+        <tr>
+          <td class="tiny nowrap">{{ e.created_at|datetime }}</td>
+          <td class="tiny">{{ e.actor_label }}</td>
+          <td class="tiny">{{ e.action.replace('_',' ')|title }}</td>
+          <td class="tiny">{{ e.reason or '—' }}</td>
+          <td class="tiny"><span class="badge neutral">{{ e.source }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}<p class="muted small">No changes recorded.</p>{% endif %}
+</div>
+{% endblock %}

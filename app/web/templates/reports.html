@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ t('nav.reports') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t('nav.reports') }}</h1>
+    <p class="sub">Every report shows what is evidenced, what is official, and what is
+      not yet verified.</p>
+  </div>
+</div>
+
+{% if annual %}
+<div class="grid grid-4 mb2">
+  {{ m.stat(t('money.expected'), annual.entitled_paise|money(currency), 'info', year) }}
+  {{ m.stat(t('money.sanctioned'), annual.sanctioned_paise|money(currency), 'info') }}
+  {{ m.stat(t('money.received'), annual.received_paise|money(currency), 'ok') }}
+  {{ m.stat(t('money.outstanding'), annual.arrears_outstanding_paise|money(currency),
+            'danger' if annual.arrears_outstanding_paise else 'ok') }}
+</div>
+{% endif %}
+
+<form method="get" class="filters">
+  <div class="field">
+    <label for="year">Year</label>
+    <select id="year" name="year" data-autosubmit>
+      {% for y in years %}<option value="{{ y }}" {{ 'selected' if y == year }}>{{ y }}</option>{% endfor %}
+    </select>
+  </div>
+  <noscript><button class="btn sm" type="submit">{{ t('common.filter') }}</button></noscript>
+</form>
+
+<div class="card">
+  <h2>Available reports</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Report</th><th>What it shows</th><th style="width:250px">Get it</th></tr></thead>
+      <tbody>
+        {% set descriptions = {
+          'employee_statement': 'One person: every month, deductions, arrears and benefits.',
+          'pending_payments': 'All amounts still outstanding, by month and employee.',
+          'discrepancies': 'Every month where a difference was found.',
+          'verification': 'Evidence level behind each recorded credit.',
+          'deductions': 'Every deduction and the authority behind it.',
+          'arrears': 'Outstanding amounts and what settled them.',
+          'benefits': 'In-kind items received, expected and short.',
+          'government_payments': 'Entitlement, sanction, disbursement and bank credit side by side.',
+          'annual_salary': 'Yearly totals across the organisation.',
+          'monthly_salary': 'Month-by-month totals across the organisation.',
+          'department_summary': 'Totals grouped for a department view.'
+        } %}
+        {% for key, label in report_types.items() if key in descriptions %}
+        <tr>
+          <td><strong>{{ label }}</strong></td>
+          <td class="small muted">{{ descriptions.get(key, '') }}</td>
+          <td>
+            {% set suffix = '?year=' ~ year ~ ('&amp;employee_uid=' ~ employee.uid if employee and key == 'employee_statement' else '') %}
+            <div class="btn-row">
+              <a class="btn sm secondary" href="/reports/view/{{ key }}{{ suffix }}">{{ t('btn.view') }}</a>
+              <a class="btn sm ghost" href="/reports/export/{{ key }}.pdf{{ suffix }}">PDF</a>
+              <a class="btn sm ghost" href="/reports/export/{{ key }}.excel{{ suffix }}">Excel</a>
+              <a class="btn sm ghost" href="/reports/export/{{ key }}.csv{{ suffix }}">CSV</a>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if employees|length > 1 %}
+<div class="card">
+  <h2>Statement for one employee</h2>
+  <form method="get" action="/reports/view/employee_statement">
+    <input type="hidden" name="year" value="{{ year }}">
+    <div class="flex">
+      <select name="employee_uid" style="min-width:240px" required>
+        {% for e in employees %}<option value="{{ e.uid }}">{{ e.full_name }} ({{ e.employee_code }})</option>{% endfor %}
+      </select>
+      <button class="btn" type="submit">{{ t('btn.view') }}</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

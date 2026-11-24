@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ t('nav.verification') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t('nav.verification') }}</h1>
+    <p class="sub">{{ employee.full_name }} · {{ employee.employee_code }}</p>
+  </div>
+</div>
+
+{{ m.alert('info', t('evidence.bank_only')) }}
+
+<div class="card">
+  <h2>Month by month</h2>
+  <p class="muted small">Two different things are tracked separately: whether the money
+    actually arrived, and whether the payment was officially authorised.</p>
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>{{ t('field.month') }}</th><th>Money arrived</th><th>Officially sanctioned</th>
+            <th>Entitlement basis</th><th>What this means</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for row in levels %}
+        <tr>
+          <td class="nowrap"><strong>{{ row.recon.period.label if locale != 'hi' else row.recon.period.label_hi }}</strong></td>
+          <td>{{ m.verification_badge(row.credit, locale) }}</td>
+          <td>{{ m.verification_badge(row.sanction, locale) }}</td>
+          <td>{{ m.verification_badge(row.basis, locale) }}</td>
+          <td class="small">{{ row.gap }}</td>
+          <td><a class="btn sm ghost" href="/periods/{{ row.recon.uid }}">{{ t('btn.view') }}</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">{{ m.empty_state(t('common.no_records')) }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>What each level means</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Level</th><th>Meaning</th></tr></thead>
+      <tbody>
+        {% for lvl, label in level_labels.items() %}
+        <tr><td class="nowrap"><strong>L{{ lvl }}</strong></td><td>{{ label }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if not integrations %}
+  <div class="alert warn mt2">
+    <span class="sym" aria-hidden="true">ⓘ</span>
+    <span>No government portal integration is configured on this system, so no payment is
+      ever marked as "verified online". Levels 3 and above are recorded only when an
+      official portal record or an authorised integration actually supplies the data.
+      To verify a payment now, upload the official payment or sanction order on the
+      relevant month's page.</span>
+  </div>
+  {% else %}
+  <ul class="evidence-list mt2">
+    {% for integration in integrations %}
+    <li><span>{{ integration.name }}</span><span class="badge ok">Connected</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</div>
+{% endblock %}

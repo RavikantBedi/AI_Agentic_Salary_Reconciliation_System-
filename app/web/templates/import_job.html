@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}Import {{ job.uid }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Import result</h1>
+    <p class="sub">{{ job.filename }} · {{ job.created_at|datetime }}</p>
+  </div>
+  {{ m.status_badge(job.status, 'ok' if job.status == 'COMPLETED' else ('danger' if job.status == 'FAILED' else 'warn')) }}
+</div>
+
+{% set s = job.summary_json or {} %}
+{% if job.status == 'FAILED' %}
+  {{ m.alert('danger', s.error or 'This file could not be read.') }}
+  <div class="card">
+    <h2>What you can do</h2>
+    <ul class="small">
+      <li>Check the file is a bank statement, not a receipt or a photo of one.</li>
+      <li>If it is a scanned image, upload a text-based PDF or a clearer copy.</li>
+      <li>Export the statement again from your bank as CSV or Excel if you can.</li>
+      <li>Or record the payments by hand.</li>
+    </ul>
+    <div class="btn-row">
+      <a class="btn" href="/import">Try another file</a>
+      <a class="btn secondary" href="/payments/manual">Record by hand</a>
+    </div>
+  </div>
+{% else %}
+
+<div class="grid grid-4 mb2">
+  {{ m.stat('Rows read', job.rows_total) }}
+  {{ m.stat('Imported', job.rows_imported, 'ok') }}
+  {{ m.stat('Already present', job.rows_duplicate, 'info', 'Skipped, not counted twice') }}
+  {{ m.stat('Could not be read', job.rows_failed, 'warn' if job.rows_failed else 'ok') }}
+</div>
+
+<div class="card">
+  <h2>What was detected</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <tbody>
+        <tr><th style="width:200px">Format</th><td>{{ s.detected_format or '—' }}</td></tr>
+        <tr><th>{{ t('field.bank') }}</th><td>{{ s.bank_name or t('common.unknown') }}</td></tr>
+        <tr><th>Account</th><td class="mono">{{ 'XXXXXX' ~ s.account_last4 if s.account_last4 else t('common.unknown') }}</td></tr>
+        <tr><th>Account holder</th><td>{{ s.account_holder or t('common.unknown') }}</td></tr>
+        {% if s.pages_read %}<tr><th>Pages read</th><td>{{ s.pages_read }}</td></tr>{% endif %}
+        {% if s.employee_suggestion %}
+        <tr><th>Suggested employee</th><td>{{ s.employee_suggestion }}<br><span class="tiny muted">{{ s.employee_note }}</span></td></tr>
+        {% elif s.employee_note %}
+        <tr><th>Employee</th><td class="small">{{ s.employee_note }}</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+  {% if s.notes %}
+  <ul class="small muted mt1">{% for n in s.notes %}<li>{{ n }}</li>{% endfor %}</ul>
+  {% endif %}
+</div>
+
+{% if errors %}
+<div class="card">
+  <h2>Rows that could not be read ({{ errors|length }})</h2>
+  {{ m.alert('warn', 'Nothing was thrown away. Each row below is listed exactly as it appeared, so you can check whether anything important was missed.') }}
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Row</th><th>Page</th><th>Problem</th><th>Original text</th></tr></thead>
+      <tbody>
+        {% for e in errors %}
+        <tr>
+          <td>{{ e.row_number or '—' }}</td>
+          <td>{{ e.page_number or '—' }}</td>
+          <td class="small">{{ m.severity_badge(e.severity) }} {{ e.error }}</td>
+          <td class="mono tiny" style="max-width:340px">{{ (e.raw_row or '')[:200] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="btn-row mt2">
+    <a class="btn secondary" href="/import">Upload a clearer file</a>
+    <a class="btn secondary" href="/payments/manual">Enter these by hand</a>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Transactions imported ({{ transactions|length }})</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>{{ t('field.date') }}</th><th>{{ t('field.narration') }}</th>
+                 <th class="num">{{ t('money.amount') }}</th><th>{{ t('field.classification') }}</th>
+                 <th>{{ t('field.month') }}</th><th>{{ t('field.status') }}</th><th></th></tr></thead>
+      <tbody>
+        {% for txn in transactions %}
+        <tr>
+          <td class="nowrap">{{ txn.txn_date|date }}</td>
+          <td class="small" style="max-width:260px">{{ (txn.description or '')[:90] }}</td>
+          <td class="num nowrap">{{ '+' if txn.direction == 'CREDIT' else '−' }}{{ txn.amount_paise|money(currency) }}</td>
+          <td class="tiny">{{ txn.classification.replace('_',' ')|title }}</td>
+          <td class="tiny">{% for a in txn.allocations if a.status != 'REJECTED' %}{{ a.period.label if a.period else '' }} {% else %}<span class="muted">—</span>{% endfor %}</td>
+          <td>{{ m.status_badge(txn.status, 'ok' if txn.status in ['RECONCILED','MATCHED'] else 'warn') }}</td>
+          <td><a class="btn sm ghost" href="/transactions/{{ txn.uid }}">{{ t('btn.view') }}</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">{{ m.empty_state('No new transactions were added by this import.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="btn-row">
+  <a class="btn" href="/">{{ t('nav.dashboard') }}</a>
+  <a class="btn secondary" href="/action-center">{{ t('nav.action_center') }}</a>
+</div>
+{% endif %}
+{% endblock %}

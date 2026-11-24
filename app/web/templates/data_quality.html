@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ t('nav.data_quality') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t('nav.data_quality') }}</h1>
+    <p class="sub">What is missing or inconsistent, so it can be fixed before it affects a payment.</p>
+  </div>
+</div>
+
+{% macro check_card(title, items, hint, link='') %}
+{% set count = items|length if items is not number else items %}
+<div class="stat {{ 'ok' if count == 0 else ('warn' if count < 5 else 'danger') }}">
+  <div class="label">{{ title }}</div>
+  <div class="value">{{ count }}</div>
+  <div class="foot">{{ hint }}</div>
+  {% if link and count %}<a class="small" href="{{ link }}">View →</a>{% endif %}
+</div>
+{% endmacro %}
+
+<div class="grid grid-3 mb2">
+  {{ check_card('Missing employee ID', checks.missing_employee_code, 'A stable code is required', '/employees') }}
+  {{ check_card('No bank account', checks.missing_bank_account, 'Payments cannot be matched by account', '/employees') }}
+  {{ check_card('No joining date', checks.missing_joining_date, 'Needed for proration', '/employees') }}
+  {{ check_card('No salary rule', checks.missing_salary_rule, 'Expected amount cannot be calculated', '/rules') }}
+  {{ check_card('Unmatched transactions', checks.unmatched_transactions, 'Not linked to any employee', '/transactions') }}
+  {{ check_card('Need review', checks.review_transactions, 'Waiting for a person to confirm', '/transactions?status_filter=REVIEW_REQUIRED') }}
+  {{ check_card('Low-confidence reading', checks.low_confidence_documents, 'Documents read with low certainty', '/documents') }}
+  {{ check_card('Conflicting orders', checks.conflicts, 'Two rules disagree', '/rules') }}
+  {{ check_card('Unverified credits', checks.unverified_credits, 'No official document yet', '/verification') }}
+  {{ check_card('Possible duplicate people', checks.duplicate_employee_flags, 'Never merged automatically', '/anomalies') }}
+  {{ check_card('Incomplete months', checks.incomplete_periods, 'Not every employee has been reconciled', '/admin') }}
+</div>
+
+{% if checks.missing_salary_rule %}
+<div class="card">
+  <h2>Employees with no applicable salary rule</h2>
+  {{ m.alert('warn', 'Without a rule, no expected amount can be calculated, so these people cannot be reconciled at all.') }}
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>{{ t('field.employee') }}</th><th>{{ t('field.designation') }}</th><th>Problem</th><th></th></tr></thead>
+      <tbody>
+        {% for row in checks.missing_salary_rule %}
+        <tr>
+          <td><a href="/employees/{{ row.employee.uid }}">{{ row.employee.full_name }}</a></td>
+          <td class="small">{{ row.employee.designation.name if row.employee.designation else '—' }}</td>
+          <td class="small muted">{{ row.problem }}</td>
+          <td><a class="btn sm secondary" href="/rules">Configure a rule</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if checks.unmatched_transactions %}
+<div class="card">
+  <h2>Transactions not linked to an employee</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>{{ t('field.date') }}</th><th class="num">{{ t('money.amount') }}</th>
+                 <th>{{ t('field.narration') }}</th><th></th></tr></thead>
+      <tbody>
+        {% for txn in checks.unmatched_transactions[:40] %}
+        <tr>
+          <td class="nowrap">{{ txn.txn_date|date }}</td>
+          <td class="num">{{ txn.amount_paise|money(currency) }}</td>
+          <td class="small">{{ (txn.description or '')[:80] }}</td>
+          <td><a class="btn sm ghost" href="/transactions/{{ txn.uid }}">Assign</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if checks.conflicts %}
+<div class="card">
+  <h2>Conflicting documents or rules</h2>
+  {{ m.alert('warn', 'The system has not chosen between these. An administrator must decide which is correct.') }}
+  <ul class="evidence-list">
+    {% for c in checks.conflicts %}
+    <li><span><strong>{{ c.subject }}</strong><br><span class="small muted">{{ c.detail }}</span></span>
+        <span class="pill-row"><span class="badge warn">{{ c.value_a }}</span>
+        <span class="badge warn">{{ c.value_b }}</span></span></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if checks.duplicate_employee_flags %}
+<div class="card">
+  <h2>People who may be recorded twice</h2>
+  {{ m.alert('info', 'These records have NOT been merged. Two people can genuinely share a similar name, so identity is always a human decision.') }}
+  <ul class="evidence-list">
+    {% for a in checks.duplicate_employee_flags %}
+    <li><span>{{ a.title_en }}<br><span class="small muted">{{ a.detail_en }}</span></span>
+        <span class="badge warn">{{ (a.score * 100)|round|int }}% similar</span></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+{% endblock %}

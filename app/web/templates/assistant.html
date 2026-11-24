@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% import "macros.html" as m %}
+{% block title %}{{ t('nav.assistant') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t('assistant.title') }}</h1>
+    <p class="sub">{{ t('assistant.grounded') }}</p>
+  </div>
+  {% if messages %}
+  <form method="post" action="/assistant/clear">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="btn ghost sm" type="submit" data-confirm="Clear this conversation?">Clear</button>
+  </form>
+  {% endif %}
+</div>
+
+<div class="alert {{ 'ok' if llm_active else 'info' }}">
+  <span class="sym" aria-hidden="true">{{ '✦' if llm_active else 'ⓘ' }}</span>
+  <span>{{ llm_status }}</span>
+</div>
+
+<div class="card">
+  {% if messages %}
+  <div class="chat" id="chat">
+    {% for msg in messages %}
+    <div class="msg {{ msg.role }}">
+      {{ msg.content }}
+      {% set ev = (msg.evidence_json or {}).get('evidence') %}
+      {% if msg.role == 'assistant' and ev %}
+      <div class="evidence">
+        <strong>{{ t('field.evidence') }}:</strong>
+        <ul style="margin:.3rem 0 0;padding-left:1.1rem">
+          {% for e in ev[:6] %}
+          <li>
+            {% if e.link %}<a href="{{ e.link }}">{{ e.label }}</a>{% else %}{{ e.label }}{% endif %}
+            {% if e.expected %} — expected {{ e.expected }}, received {{ e.received }}{% endif %}
+            {% if e.amount %} — {{ e.amount }}{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% if msg.used_llm %}<div class="tiny mt1">Wording assisted by AI; all figures come from your records.</div>{% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+    {{ m.empty_state('Ask a question about your payments below.', '✦') }}
+  {% endif %}
+
+  <div class="divider"></div>
+
+  <div class="suggestions">
+    {% for q in suggestions %}
+    <button type="button" data-question="{{ q }}">{{ q }}</button>
+    {% endfor %}
+  </div>
+
+  <form method="post" action="/assistant" data-guard>
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    {% if employee and employees %}<input type="hidden" name="employee_uid" value="{{ employee.uid }}">{% endif %}
+    <div class="flex" style="align-items:stretch">
+      <input id="assistant-input" type="text" name="question" required
+             placeholder="{{ t('assistant.placeholder') }}" style="flex:1;min-width:180px"
+             autocomplete="off">
+      <button class="btn" type="submit" data-busy="Thinking...">{{ t('btn.ask') }}</button>
+    </div>
+  </form>
+</div>
+
+{% if employees %}
+<div class="card">
+  <h3>Ask about a different employee</h3>
+  <form method="get" action="/assistant">
+    <div class="flex">
+      <select name="employee_uid" style="min-width:220px">
+        {% for e in employees %}
+        <option value="{{ e.uid }}" {{ 'selected' if employee and employee.id == e.id }}>{{ e.full_name }} ({{ e.employee_code }})</option>
+        {% endfor %}
+      </select>
+      <button class="btn secondary sm" type="submit">Switch</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <h3>How answers are produced</h3>
+  <ol class="small muted">
+    <li>Your question is matched to a specific kind of query.</li>
+    <li>That query runs against your actual records in the database.</li>
+    <li>The answer is built from those rows, and the evidence is attached.</li>
+    <li>If an AI key is configured, it may only reword the answer — it can never change a figure.</li>
+  </ol>
+  <p class="small muted">If the records do not contain the answer, the assistant says so
+    rather than guessing.</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Keep the conversation scrolled to the newest message.
+  var chat = document.getElementById('chat');
+  if (chat) chat.scrollTop = chat.scrollHeight;
+</script>
+{% endblock %}
